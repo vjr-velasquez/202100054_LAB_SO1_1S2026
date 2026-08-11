@@ -1,0 +1,17 @@
+# Binarios de Go
+api1/api1
+api2/api2
+api3/api3
+*.exe
+*.out
+*.test
+
+# Variables de entorno
+.env
+.env.*
+!.env.example
+
+# Logs y editores
+*.log
+.vscode/
+.idea/
