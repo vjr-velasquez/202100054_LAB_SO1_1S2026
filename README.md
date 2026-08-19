@@ -4,7 +4,6 @@ Implementación de tres APIs en Go distribuidas entre dos máquinas virtuales, u
 
 **Estudiante:** Victor Hugo Velásquez Hernández  
 **Carné:** 202100054  
-**Repositorio:** <https://github.com/vjr-velasquez/202100054_LAB_SO1_1S2026>
 
 ## Arquitectura
 
