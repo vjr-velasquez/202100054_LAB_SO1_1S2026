@@ -1,0 +1,5 @@
+ARCHIVO SEÑUELO PARA EL PROYECTO 2
+Carnet: 202100054
+Usuario: administrador_demo
+Token: SO1-DECOY-NO-REAL-202100054
+Este archivo no contiene información sensible real.
