@@ -1,46 +1,175 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/math64.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/proc_fs.h>
+#include <linux/rcupdate.h>
+#include <linux/sched/mm.h>
+#include <linux/sched/signal.h>
 #include <linux/seq_file.h>
 #include <linux/sysinfo.h>
 
 #define PROC_NAME "continfo_pr2_so1_202100054"
 
-MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Victor Hugo Velasquez Hernandez");
-MODULE_DESCRIPTION("Telemetria de memoria y procesos para Proyecto 2 SO1");
-MODULE_VERSION("1.0");
-
 static struct proc_dir_entry *proc_entry;
 
-static unsigned long long pages_to_kb(unsigned long pages)
+static void print_json_string(struct seq_file *m, const char *text)
 {
-    return (unsigned long long)pages << (PAGE_SHIFT - 10);
+    const unsigned char *cursor = (const unsigned char *)text;
+
+    seq_putc(m, '"');
+
+    while (*cursor) {
+        switch (*cursor) {
+        case '"':
+            seq_puts(m, "\\\"");
+            break;
+        case '\\':
+            seq_puts(m, "\\\\");
+            break;
+        case '\n':
+            seq_puts(m, "\\n");
+            break;
+        case '\r':
+            seq_puts(m, "\\r");
+            break;
+        case '\t':
+            seq_puts(m, "\\t");
+            break;
+        default:
+            if (*cursor < 0x20)
+                seq_printf(m, "\\u%04x", *cursor);
+            else
+                seq_putc(m, *cursor);
+        }
+
+        cursor++;
+    }
+
+    seq_putc(m, '"');
 }
 
-static int continfo_show(struct seq_file *file, void *private_data)
+
+
+static void print_process(struct seq_file *m,
+                          struct task_struct *task,
+                          u64 total_memory_kb,
+                          bool *first_process)
+{
+    struct mm_struct *mm;
+    char name[TASK_COMM_LEN];
+    u64 virtual_size_kb;
+    u64 resident_size_kb;
+    u64 memory_basis_points;
+
+    mm = get_task_mm(task);
+    if (!mm)
+        return;
+
+    virtual_size_kb =
+        ((u64)READ_ONCE(mm->total_vm)) << (PAGE_SHIFT - 10);
+
+    resident_size_kb =
+        ((u64)get_mm_rss(mm)) << (PAGE_SHIFT - 10);
+
+    mmput(mm);
+
+    get_task_comm(name, task);
+
+    if (total_memory_kb > 0)
+        memory_basis_points =
+            div64_u64(resident_size_kb * 10000, total_memory_kb);
+    else
+        memory_basis_points = 0;
+
+    if (!*first_process)
+        seq_puts(m, ",\n");
+
+    *first_process = false;
+
+    seq_puts(m, "    {\n");
+
+    seq_printf(m, "      \"pid\": %d,\n", task_pid_nr(task));
+
+    seq_puts(m, "      \"name\": ");
+    print_json_string(m, name);
+    seq_puts(m, ",\n");
+
+    /*
+     * task->comm es seguro para módulos externos. El Daemon en Go
+     * enriquecerá este dato con el ID real del contenedor.
+     */
+    seq_puts(m, "      \"command\": ");
+    print_json_string(m, name);
+    seq_puts(m, ",\n");
+
+    seq_printf(m, "      \"vsz_kb\": %llu,\n",
+               (unsigned long long)virtual_size_kb);
+
+    seq_printf(m, "      \"rss_kb\": %llu,\n",
+               (unsigned long long)resident_size_kb);
+
+    seq_printf(m, "      \"memory_percent\": %llu.%02llu,\n",
+               (unsigned long long)(memory_basis_points / 100),
+               (unsigned long long)(memory_basis_points % 100));
+
+    /* Se calculará con muestras temporales en el siguiente bloque. */
+    seq_puts(m, "      \"cpu_percent\": 0.00\n");
+
+    seq_puts(m, "    }");
+}
+
+static int continfo_show(struct seq_file *m, void *v)
 {
     struct sysinfo memory_info;
-    unsigned long long total_kb;
-    unsigned long long free_kb;
-    unsigned long long used_kb;
+    struct task_struct *task;
+    u64 total_memory_kb;
+    u64 free_memory_kb;
+    u64 used_memory_kb;
+    bool first_process = true;
 
     si_meminfo(&memory_info);
 
-    total_kb = pages_to_kb(memory_info.totalram);
-    free_kb = pages_to_kb(memory_info.freeram);
-    used_kb = total_kb - free_kb;
+    total_memory_kb =
+        div_u64((u64)memory_info.totalram * memory_info.mem_unit, 1024);
 
-    seq_puts(file, "{\n");
-    seq_puts(file, "  \"memory\": {\n");
-    seq_printf(file, "    \"total_kb\": %llu,\n", total_kb);
-    seq_printf(file, "    \"free_kb\": %llu,\n", free_kb);
-    seq_printf(file, "    \"used_kb\": %llu\n", used_kb);
-    seq_puts(file, "  },\n");
-    seq_puts(file, "  \"processes\": []\n");
-    seq_puts(file, "}\n");
+    free_memory_kb =
+        div_u64((u64)memory_info.freeram * memory_info.mem_unit, 1024);
+
+    used_memory_kb = total_memory_kb - free_memory_kb;
+
+    seq_puts(m, "{\n");
+    seq_puts(m, "  \"memory\": {\n");
+    seq_printf(m, "    \"total_kb\": %llu,\n",
+               (unsigned long long)total_memory_kb);
+    seq_printf(m, "    \"free_kb\": %llu,\n",
+               (unsigned long long)free_memory_kb);
+    seq_printf(m, "    \"used_kb\": %llu\n",
+               (unsigned long long)used_memory_kb);
+    seq_puts(m, "  },\n");
+    seq_puts(m, "  \"processes\": [\n");
+
+    /*
+     * Se conserva una referencia por proceso para poder consultar su
+     * memoria y línea de comandos fuera de la sección crítica RCU.
+     */
+    rcu_read_lock();
+
+    for_each_process(task) {
+        get_task_struct(task);
+        rcu_read_unlock();
+
+        print_process(m, task, total_memory_kb, &first_process);
+
+        rcu_read_lock();
+        put_task_struct(task);
+    }
+
+    rcu_read_unlock();
+
+    seq_puts(m, "\n  ]\n");
+    seq_puts(m, "}\n");
 
     return 0;
 }
@@ -59,27 +188,32 @@ static const struct proc_ops continfo_proc_ops = {
 
 static int __init continfo_init(void)
 {
-    proc_entry = proc_create(
-        PROC_NAME,
-        0444,
-        NULL,
-        &continfo_proc_ops
-    );
+    proc_entry = proc_create(PROC_NAME, 0444, NULL, &continfo_proc_ops);
 
     if (!proc_entry) {
-        pr_err("SO1 Proyecto 2: no se pudo crear /proc/%s\n", PROC_NAME);
+        pr_err("SO1 Proyecto 2: no se pudo crear /proc/%s\n",
+               PROC_NAME);
         return -ENOMEM;
     }
 
-    pr_info("SO1 Proyecto 2: modulo cargado, /proc/%s creado\n", PROC_NAME);
+    pr_info("SO1 Proyecto 2: modulo cargado, /proc/%s creado\n",
+            PROC_NAME);
+
     return 0;
 }
 
 static void __exit continfo_exit(void)
 {
     proc_remove(proc_entry);
-    pr_info("SO1 Proyecto 2: modulo retirado, /proc/%s eliminado\n", PROC_NAME);
+
+    pr_info("SO1 Proyecto 2: modulo retirado, /proc/%s eliminado\n",
+            PROC_NAME);
 }
 
 module_init(continfo_init);
 module_exit(continfo_exit);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Victor Hugo Velasquez Hernandez");
+MODULE_DESCRIPTION("Telemetria de memoria y procesos para Proyecto 2 SO1");
+MODULE_VERSION("1.1");
