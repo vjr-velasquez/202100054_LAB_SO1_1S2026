@@ -10,6 +10,9 @@
 #include <linux/seq_file.h>
 #include <linux/sysinfo.h>
 
+#include <linux/ktime.h>
+#include <linux/sched/cputime.h>
+
 #define PROC_NAME "continfo_pr2_so1_202100054"
 
 static struct proc_dir_entry *proc_entry;
@@ -62,6 +65,13 @@ static void print_process(struct seq_file *m,
     u64 virtual_size_kb;
     u64 resident_size_kb;
     u64 memory_basis_points;
+    u64 user_time_ns;
+    u64 system_time_ns;
+    u64 cpu_time_ms;
+    u64 elapsed_time_ms;
+    u64 start_boottime_ns;
+    u64 current_boottime_ns;
+    u64 cpu_basis_points;
 
     mm = get_task_mm(task);
     if (!mm)
@@ -76,6 +86,34 @@ static void print_process(struct seq_file *m,
     mmput(mm);
 
     get_task_comm(name, task);
+
+
+
+    task_cputime_adjusted(task , &user_time_ns, &system_time_ns);
+
+    start_boottime_ns = READ_ONCE(task->start_boottime);
+    current_boottime_ns = ktime_get_boottime_ns();
+
+    cpu_time_ms = 
+        div_u64(user_time_ns + system_time_ns, 1000000);
+    
+    if (current_boottime_ns > start_boottime_ns) {
+        elapsed_time_ms =
+            div_u64(current_boottime_ns - start_boottime_ns,
+                    NSEC_PER_MSEC);
+    } else {
+        elapsed_time_ms = 0;
+    }
+
+    if (elapsed_time_ms > 0)
+        cpu_basis_points =
+            div64_u64(cpu_time_ms * 10000, elapsed_time_ms);
+    else
+        cpu_basis_points = 0;
+
+    /* Un proceso individual no debe superar el 100 %. */
+    if (cpu_basis_points > 10000)
+        cpu_basis_points = 10000;
 
     if (total_memory_kb > 0)
         memory_basis_points =
@@ -114,8 +152,9 @@ static void print_process(struct seq_file *m,
                (unsigned long long)(memory_basis_points / 100),
                (unsigned long long)(memory_basis_points % 100));
 
-    /* Se calculará con muestras temporales en el siguiente bloque. */
-    seq_puts(m, "      \"cpu_percent\": 0.00\n");
+    seq_printf(m, "      \"cpu_percent\": %llu.%02llu\n",
+               (unsigned long long)(cpu_basis_points / 100),
+               (unsigned long long)(cpu_basis_points % 100));
 
     seq_puts(m, "    }");
 }
@@ -216,4 +255,4 @@ module_exit(continfo_exit);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Victor Hugo Velasquez Hernandez");
 MODULE_DESCRIPTION("Telemetria de memoria y procesos para Proyecto 2 SO1");
-MODULE_VERSION("1.1");
+MODULE_VERSION("1.2");
