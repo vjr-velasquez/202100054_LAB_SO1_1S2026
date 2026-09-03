@@ -165,3 +165,75 @@ func (client *Client) getJSON(
 
 	return nil
 }
+
+func (client *Client) RemoveProjectContainer(
+	ctx context.Context,
+	containerID string,
+) error {
+	if strings.TrimSpace(containerID) == "" {
+		return fmt.Errorf("ID de contenedor vacío")
+	}
+
+	var inspected containerInspect
+
+	inspectPath :=
+		"/containers/" + url.PathEscape(containerID) + "/json"
+
+	if err := client.getJSON(ctx, inspectPath, &inspected); err != nil {
+		return fmt.Errorf("verificar contenedor: %w", err)
+	}
+
+	labels := inspected.Config.Labels
+
+	if labels["so1.project"] != "proyecto2" {
+		return fmt.Errorf(
+			"contenedor %.12s no pertenece al proyecto",
+			containerID,
+		)
+	}
+
+	if strings.EqualFold(labels["so1.protected"], "true") {
+		return fmt.Errorf(
+			"contenedor %.12s está protegido",
+			containerID,
+		)
+	}
+
+	query := url.Values{}
+	query.Set("force", "true")
+	query.Set("v", "true")
+
+	deletePath :=
+		"/containers/" +
+			url.PathEscape(containerID) +
+			"?" +
+			query.Encode()
+
+	request, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodDelete,
+		"http://docker"+deletePath,
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("crear solicitud de eliminación: %w", err)
+	}
+
+	response, err := client.httpClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("eliminar contenedor: %w", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
+
+		return fmt.Errorf(
+			"Docker respondió %s: %s",
+			response.Status,
+			strings.TrimSpace(string(body)),
+		)
+	}
+
+	return nil
+}

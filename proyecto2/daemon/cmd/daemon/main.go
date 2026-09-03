@@ -49,6 +49,12 @@ func main() {
 		"cantidad de contenedores de alto consumo que deben conservarse",
 	)
 
+	execute := flag.Bool(
+		"execute",
+		false,
+		"aplicar las eliminaciones propuestas por la politica",
+	)
+
 	flag.Parse()
 
 	snapshot, err := telemetry.ReadSnapshot(*procPath)
@@ -61,7 +67,7 @@ func main() {
 		processByPID[process.PID] = process
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	dockerClient := dockerclient.New(*dockerSocket)
@@ -83,7 +89,13 @@ func main() {
 		*highTarget,
 	)
 
-	printPolicyPlan(policyResult)
+	printPolicyPlan(policyResult, *execute)
+
+	if *execute {
+		if err := executePolicy(ctx, dockerClient, policyResult); err != nil {
+			log.Fatalf("la política terminó con errores: %v", err)
+		}
+	}
 }
 
 func printMemory(snapshot telemetry.Snapshot) {
@@ -196,8 +208,13 @@ func buildPolicyCandidates(
 	return candidates
 }
 
-func printPolicyPlan(result policy.Result) {
-	fmt.Println("\nPlan de administración — DRY-RUN")
+func printPolicyPlan(result policy.Result, execute bool) {
+	mode := "DRY-RUN"
+	if execute {
+		mode = "EXECUTE"
+	}
+
+	fmt.Printf("\nPlan de administración — %s\n", mode)
 
 	for _, decision := range result.Decisions {
 		fmt.Printf(
@@ -223,5 +240,47 @@ func printPolicyPlan(result policy.Result) {
 		result.MissingHigh,
 	)
 
-	fmt.Println("DRY-RUN: no se modificó ningún contenedor")
+	if !execute {
+		fmt.Println("DRY-RUN: no se modificó ningún contenedor")
+	}
+}
+
+func executePolicy(
+	ctx context.Context,
+	client *dockerclient.Client,
+	result policy.Result,
+) error {
+	removedCount := 0
+
+	for _, decision := range result.Decisions {
+		if decision.Action != policy.ActionRemove {
+			continue
+		}
+
+		fmt.Printf(
+			"Eliminando ID=%.12s nombre=%s...\n",
+			decision.Candidate.ID,
+			decision.Candidate.Name,
+		)
+
+		if err := client.RemoveProjectContainer(
+			ctx,
+			decision.Candidate.ID,
+		); err != nil {
+			return fmt.Errorf(
+				"eliminar %s: %w",
+				decision.Candidate.Name,
+				err,
+			)
+		}
+
+		removedCount++
+	}
+
+	fmt.Printf(
+		"Ejecución completada: contenedores eliminados=%d\n",
+		removedCount,
+	)
+
+	return nil
 }
