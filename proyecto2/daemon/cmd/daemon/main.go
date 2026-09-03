@@ -1,21 +1,33 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"sort"
+	"time"
 
+	"github.com/vjr-velasquez/202100054_LAB_SO1_1S2026/proyecto2/daemon/internal/dockerclient"
 	"github.com/vjr-velasquez/202100054_LAB_SO1_1S2026/proyecto2/daemon/internal/telemetry"
 )
 
-const defaultProcPath = "/proc/continfo_pr2_so1_202100054"
+const (
+	defaultProcPath     = "/proc/continfo_pr2_so1_202100054"
+	defaultDockerSocket = "/var/run/docker.sock"
+)
 
 func main() {
 	procPath := flag.String(
 		"proc",
 		defaultProcPath,
 		"ruta del archivo de telemetría del módulo",
+	)
+
+	dockerSocket := flag.String(
+		"docker-socket",
+		defaultDockerSocket,
+		"ruta del socket de Docker",
 	)
 
 	topCount := flag.Int(
@@ -31,19 +43,27 @@ func main() {
 		log.Fatalf("no se pudo obtener la telemetría: %v", err)
 	}
 
-	sort.SliceStable(snapshot.Processes, func(i, j int) bool {
-		return snapshot.Processes[i].CPUPercent >
-			snapshot.Processes[j].CPUPercent
-	})
-
-	limit := *topCount
-	if limit < 0 {
-		limit = 0
-	}
-	if limit > len(snapshot.Processes) {
-		limit = len(snapshot.Processes)
+	processByPID := make(map[int]telemetry.ProcessStats)
+	for _, process := range snapshot.Processes {
+		processByPID[process.PID] = process
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	dockerClient := dockerclient.New(*dockerSocket)
+
+	containers, err := dockerClient.ListProjectContainers(ctx)
+	if err != nil {
+		log.Fatalf("no se pudo consultar Docker: %v", err)
+	}
+
+	printMemory(snapshot)
+	printTopProcesses(snapshot.Processes, *topCount)
+	printContainers(containers, processByPID)
+}
+
+func printMemory(snapshot telemetry.Snapshot) {
 	memoryPercent :=
 		float64(snapshot.Memory.UsedKB) * 100 /
 			float64(snapshot.Memory.TotalKB)
@@ -56,13 +76,73 @@ func main() {
 		memoryPercent,
 	)
 	fmt.Printf("Procesos encontrados: %d\n", len(snapshot.Processes))
-	fmt.Printf("Top %d procesos por CPU:\n", limit)
+}
 
-	for _, process := range snapshot.Processes[:limit] {
+func printTopProcesses(
+	processes []telemetry.ProcessStats,
+	topCount int,
+) {
+	sortedProcesses := append([]telemetry.ProcessStats(nil), processes...)
+
+	sort.SliceStable(sortedProcesses, func(i, j int) bool {
+		return sortedProcesses[i].CPUPercent >
+			sortedProcesses[j].CPUPercent
+	})
+
+	limit := topCount
+	if limit < 0 {
+		limit = 0
+	}
+	if limit > len(sortedProcesses) {
+		limit = len(sortedProcesses)
+	}
+
+	fmt.Printf("\nTop %d procesos por CPU:\n", limit)
+
+	for _, process := range sortedProcesses[:limit] {
 		fmt.Printf(
 			"PID=%d nombre=%s CPU=%.2f%% RSS=%d KB VSZ=%d KB\n",
 			process.PID,
 			process.Name,
+			process.CPUPercent,
+			process.ResidentSizeKB,
+			process.VirtualSizeKB,
+		)
+	}
+}
+
+func printContainers(
+	containers []dockerclient.Container,
+	processByPID map[int]telemetry.ProcessStats,
+) {
+	fmt.Printf(
+		"\nContenedores del proyecto encontrados: %d\n",
+		len(containers),
+	)
+
+	for _, container := range containers {
+		process, found := processByPID[container.PID]
+
+		if !found {
+			fmt.Printf(
+				"ID=%.12s nombre=%s perfil=%s PID=%d telemetría=no encontrada\n",
+				container.ID,
+				container.Name,
+				container.Profile,
+				container.PID,
+			)
+			continue
+		}
+
+		fmt.Printf(
+			"ID=%.12s nombre=%s perfil=%s tier=%s protegido=%t "+
+				"PID=%d CPU=%.2f%% RSS=%d KB VSZ=%d KB\n",
+			container.ID,
+			container.Name,
+			container.Profile,
+			container.Tier,
+			container.Protected,
+			container.PID,
 			process.CPUPercent,
 			process.ResidentSizeKB,
 			process.VirtualSizeKB,
