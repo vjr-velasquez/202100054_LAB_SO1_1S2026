@@ -31,6 +31,12 @@ func main() {
 		"ruta del socket de Docker",
 	)
 
+	valkeyAddress := flag.String(
+		"valkey-address",
+		"127.0.0.1:6379",
+		"dirección del servidor Valkey",
+	)
+
 	topCount := flag.Int(
 		"top",
 		5,
@@ -96,6 +102,20 @@ func main() {
 			log.Fatalf("la política terminó con errores: %v", err)
 		}
 	}
+
+	if err := persistTelemetry(
+		ctx,
+		*valkeyAddress,
+		snapshot,
+		containers,
+		processByPID,
+		policyResult,
+		*execute,
+	); err != nil {
+		log.Fatalf("no se pudo persistir la telemetría: %v", err)
+	}
+
+	fmt.Println("Telemetría almacenada correctamente en Valkey")
 }
 
 func printMemory(snapshot telemetry.Snapshot) {
@@ -278,7 +298,7 @@ func executePolicy(
 	}
 
 	fmt.Printf(
-		"Ejecución completada: contenedores eliminados=%d\n",
+		"Ejecución completada: %d contenedores eliminados\n",
 		removedCount,
 	)
 

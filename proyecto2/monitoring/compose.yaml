@@ -1,0 +1,37 @@
+name: so1-proyecto2
+
+services:
+  valkey:
+    image: valkey/valkey:8.1.10-alpine
+    container_name: so1-valkey
+    command:
+      - valkey-server
+      - --appendonly
+      - "yes"
+      - --save
+      - "60"
+      - "1"
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - valkey-data:/data
+    restart: unless-stopped
+    labels:
+      so1.project: proyecto2
+      so1.profile: monitoring
+      so1.tier: system
+      so1.protected: "true"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - monitoring
+
+volumes:
+  valkey-data:
+
+networks:
+  monitoring:
+    name: so1-monitoring
