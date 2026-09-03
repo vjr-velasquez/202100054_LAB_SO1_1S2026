@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/vjr-velasquez/202100054_LAB_SO1_1S2026/proyecto2/daemon/internal/dockerclient"
+	"github.com/vjr-velasquez/202100054_LAB_SO1_1S2026/proyecto2/daemon/internal/policy"
 	"github.com/vjr-velasquez/202100054_LAB_SO1_1S2026/proyecto2/daemon/internal/telemetry"
 )
 
@@ -36,6 +37,18 @@ func main() {
 		"cantidad de procesos con mayor uso de CPU",
 	)
 
+	lowTarget := flag.Int(
+		"low-target",
+		3,
+		"cantidad de contenedores de bajo consumo que deben conservarse",
+	)
+
+	highTarget := flag.Int(
+		"high-target",
+		2,
+		"cantidad de contenedores de alto consumo que deben conservarse",
+	)
+
 	flag.Parse()
 
 	snapshot, err := telemetry.ReadSnapshot(*procPath)
@@ -61,6 +74,16 @@ func main() {
 	printMemory(snapshot)
 	printTopProcesses(snapshot.Processes, *topCount)
 	printContainers(containers, processByPID)
+
+	candidates := buildPolicyCandidates(containers, processByPID)
+
+	policyResult := policy.Evaluate(
+		candidates,
+		*lowTarget,
+		*highTarget,
+	)
+
+	printPolicyPlan(policyResult)
 }
 
 func printMemory(snapshot telemetry.Snapshot) {
@@ -148,4 +171,57 @@ func printContainers(
 			process.VirtualSizeKB,
 		)
 	}
+}
+
+func buildPolicyCandidates(
+	containers []dockerclient.Container,
+	processByPID map[int]telemetry.ProcessStats,
+) []policy.Candidate {
+	candidates := make([]policy.Candidate, 0, len(containers))
+
+	for _, container := range containers {
+		process := processByPID[container.PID]
+
+		candidates = append(candidates, policy.Candidate{
+			ID:        container.ID,
+			Name:      container.Name,
+			Profile:   container.Profile,
+			Tier:      container.Tier,
+			Protected: container.Protected,
+			CPU:       process.CPUPercent,
+			RSSKB:     process.ResidentSizeKB,
+		})
+	}
+
+	return candidates
+}
+
+func printPolicyPlan(result policy.Result) {
+	fmt.Println("\nPlan de administración — DRY-RUN")
+
+	for _, decision := range result.Decisions {
+		fmt.Printf(
+			"[%s] ID=%.12s nombre=%s perfil=%s tier=%s "+
+				"CPU=%.2f%% RSS=%d KB motivo=%s\n",
+			decision.Action,
+			decision.Candidate.ID,
+			decision.Candidate.Name,
+			decision.Candidate.Profile,
+			decision.Candidate.Tier,
+			decision.Candidate.CPU,
+			decision.Candidate.RSSKB,
+			decision.Reason,
+		)
+	}
+
+	fmt.Printf(
+		"Resumen: low conservados=%d faltantes=%d | "+
+			"high conservados=%d faltantes=%d\n",
+		result.LowKept,
+		result.MissingLow,
+		result.HighKept,
+		result.MissingHigh,
+	)
+
+	fmt.Println("DRY-RUN: no se modificó ningún contenedor")
 }
