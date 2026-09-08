@@ -69,6 +69,20 @@ func runCycle(config cycleConfig) error {
 		); err != nil {
 			return fmt.Errorf("aplicar política: %w", err)
 		}
+
+		createdContainers, err := replenishContainers(
+			ctx,
+			config.dockerClient,
+			policyResult,
+		)
+		if err != nil {
+			return fmt.Errorf("reponer contenedores: %w", err)
+		}
+
+		containers = append(
+			containers,
+			createdContainers...,
+		)
 	}
 
 	if err := persistTelemetry(
