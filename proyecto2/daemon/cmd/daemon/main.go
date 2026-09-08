@@ -5,7 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
 	"sort"
+	"syscall"
 	"time"
 
 	"github.com/vjr-velasquez/202100054_LAB_SO1_1S2026/proyecto2/daemon/internal/dockerclient"
@@ -31,6 +34,12 @@ func main() {
 		"ruta del socket de Docker",
 	)
 
+	valkeyAddress := flag.String(
+		"valkey-address",
+		"127.0.0.1:6379",
+		"dirección del servidor Valkey",
+	)
+
 	topCount := flag.Int(
 		"top",
 		5,
@@ -49,41 +58,92 @@ func main() {
 		"cantidad de contenedores de alto consumo que deben conservarse",
 	)
 
+	execute := flag.Bool(
+		"execute",
+		false,
+		"aplicar las eliminaciones propuestas por la politica",
+	)
+
+	interval := flag.Duration(
+		"interval",
+		0,
+		"intervalo entre lecturas; 0 ejecuta solamente una vez",
+	)
+
 	flag.Parse()
 
-	snapshot, err := telemetry.ReadSnapshot(*procPath)
-	if err != nil {
-		log.Fatalf("no se pudo obtener la telemetría: %v", err)
+	if *interval < 0 {
+		log.Fatal("el intervalo no puede ser negativo")
 	}
-
-	processByPID := make(map[int]telemetry.ProcessStats)
-	for _, process := range snapshot.Processes {
-		processByPID[process.PID] = process
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 
 	dockerClient := dockerclient.New(*dockerSocket)
 
-	containers, err := dockerClient.ListProjectContainers(ctx)
-	if err != nil {
-		log.Fatalf("no se pudo consultar Docker: %v", err)
+	config := cycleConfig{
+		procPath:      *procPath,
+		valkeyAddress: *valkeyAddress,
+		topCount:      *topCount,
+		lowTarget:     *lowTarget,
+		highTarget:    *highTarget,
+		execute:       *execute,
+		dockerClient:  dockerClient,
 	}
 
-	printMemory(snapshot)
-	printTopProcesses(snapshot.Processes, *topCount)
-	printContainers(containers, processByPID)
+	if *interval == 0 {
+		if err := runCycle(config); err != nil {
+			log.Fatalf("falló el ciclo de telemetría: %v", err)
+		}
 
-	candidates := buildPolicyCandidates(containers, processByPID)
+		return
+	}
 
-	policyResult := policy.Evaluate(
-		candidates,
-		*lowTarget,
-		*highTarget,
+	if *interval < time.Second {
+		log.Fatal("el intervalo periódico debe ser de al menos 1 segundo")
+	}
+
+	stopSignals := make(chan os.Signal, 1)
+
+	signal.Notify(
+		stopSignals,
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer signal.Stop(stopSignals)
+
+	ticker := time.NewTicker(*interval)
+	defer ticker.Stop()
+
+	fmt.Printf(
+		"Daemon periódico iniciado: intervalo=%s\n",
+		interval.String(),
 	)
 
-	printPolicyPlan(policyResult)
+	run := func() {
+		fmt.Printf(
+			"\nCiclo iniciado: %s\n",
+			time.Now().UTC().Format(time.RFC3339),
+		)
+
+		if err := runCycle(config); err != nil {
+			log.Printf("el ciclo terminó con error: %v", err)
+		}
+	}
+
+	run()
+
+	for {
+		select {
+		case <-ticker.C:
+			run()
+
+		case receivedSignal := <-stopSignals:
+			fmt.Printf(
+				"\nSeñal %s recibida; cerrando el daemon\n",
+				receivedSignal,
+			)
+			return
+		}
+	}
+
 }
 
 func printMemory(snapshot telemetry.Snapshot) {
@@ -196,8 +256,13 @@ func buildPolicyCandidates(
 	return candidates
 }
 
-func printPolicyPlan(result policy.Result) {
-	fmt.Println("\nPlan de administración — DRY-RUN")
+func printPolicyPlan(result policy.Result, execute bool) {
+	mode := "DRY-RUN"
+	if execute {
+		mode = "EXECUTE"
+	}
+
+	fmt.Printf("\nPlan de administración — %s\n", mode)
 
 	for _, decision := range result.Decisions {
 		fmt.Printf(
@@ -223,5 +288,47 @@ func printPolicyPlan(result policy.Result) {
 		result.MissingHigh,
 	)
 
-	fmt.Println("DRY-RUN: no se modificó ningún contenedor")
+	if !execute {
+		fmt.Println("DRY-RUN: no se modificó ningún contenedor")
+	}
+}
+
+func executePolicy(
+	ctx context.Context,
+	client *dockerclient.Client,
+	result policy.Result,
+) error {
+	removedCount := 0
+
+	for _, decision := range result.Decisions {
+		if decision.Action != policy.ActionRemove {
+			continue
+		}
+
+		fmt.Printf(
+			"Eliminando ID=%.12s nombre=%s...\n",
+			decision.Candidate.ID,
+			decision.Candidate.Name,
+		)
+
+		if err := client.RemoveProjectContainer(
+			ctx,
+			decision.Candidate.ID,
+		); err != nil {
+			return fmt.Errorf(
+				"eliminar %s: %w",
+				decision.Candidate.Name,
+				err,
+			)
+		}
+
+		removedCount++
+	}
+
+	fmt.Printf(
+		"Ejecución completada: %d contenedores eliminados\n",
+		removedCount,
+	)
+
+	return nil
 }
