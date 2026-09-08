@@ -40,6 +40,18 @@ func main() {
 		"dirección del servidor Valkey",
 	)
 
+	projectRoot := flag.String(
+		"project-root",
+		"..",
+		"ruta de la carpeta proyecto2",
+	)
+
+	manageLifecycle := flag.Bool(
+		"manage-lifecycle",
+		true,
+		"levantar infraestructura, módulo y cronjob automáticamente",
+	)
+
 	topCount := flag.Int(
 		"top",
 		5,
@@ -66,7 +78,7 @@ func main() {
 
 	interval := flag.Duration(
 		"interval",
-		0,
+		30*time.Second,
 		"intervalo entre lecturas; 0 ejecuta solamente una vez",
 	)
 
@@ -74,6 +86,31 @@ func main() {
 
 	if *interval < 0 {
 		log.Fatal("el intervalo no puede ser negativo")
+	}
+
+	if *interval > 0 && *interval < 20*time.Second {
+		log.Fatal(
+			"el intervalo periódico debe ser de al menos 20 segundos",
+		)
+	}
+
+	if *interval > 60*time.Second {
+		log.Fatal(
+			"el intervalo periódico no puede superar 60 segundos",
+		)
+	}
+
+	if *manageLifecycle {
+		cleanupLifecycle, err :=
+			startManagedLifecycle(*projectRoot)
+		if err != nil {
+			log.Fatalf(
+				"no se pudo iniciar el servicio: %v",
+				err,
+			)
+		}
+
+		defer cleanupLifecycle()
 	}
 
 	dockerClient := dockerclient.New(*dockerSocket)
@@ -90,14 +127,13 @@ func main() {
 
 	if *interval == 0 {
 		if err := runCycle(config); err != nil {
-			log.Fatalf("falló el ciclo de telemetría: %v", err)
+			log.Printf(
+				"falló el ciclo de telemetría: %v",
+				err,
+			)
 		}
 
 		return
-	}
-
-	if *interval < time.Second {
-		log.Fatal("el intervalo periódico debe ser de al menos 1 segundo")
 	}
 
 	stopSignals := make(chan os.Signal, 1)
