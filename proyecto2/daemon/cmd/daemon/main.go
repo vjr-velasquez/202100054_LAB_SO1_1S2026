@@ -5,7 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
 	"sort"
+	"syscall"
 	"time"
 
 	"github.com/vjr-velasquez/202100054_LAB_SO1_1S2026/proyecto2/daemon/internal/dockerclient"
@@ -61,61 +64,86 @@ func main() {
 		"aplicar las eliminaciones propuestas por la politica",
 	)
 
+	interval := flag.Duration(
+		"interval",
+		0,
+		"intervalo entre lecturas; 0 ejecuta solamente una vez",
+	)
+
 	flag.Parse()
 
-	snapshot, err := telemetry.ReadSnapshot(*procPath)
-	if err != nil {
-		log.Fatalf("no se pudo obtener la telemetría: %v", err)
+	if *interval < 0 {
+		log.Fatal("el intervalo no puede ser negativo")
 	}
-
-	processByPID := make(map[int]telemetry.ProcessStats)
-	for _, process := range snapshot.Processes {
-		processByPID[process.PID] = process
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 
 	dockerClient := dockerclient.New(*dockerSocket)
 
-	containers, err := dockerClient.ListProjectContainers(ctx)
-	if err != nil {
-		log.Fatalf("no se pudo consultar Docker: %v", err)
+	config := cycleConfig{
+		procPath:      *procPath,
+		valkeyAddress: *valkeyAddress,
+		topCount:      *topCount,
+		lowTarget:     *lowTarget,
+		highTarget:    *highTarget,
+		execute:       *execute,
+		dockerClient:  dockerClient,
 	}
 
-	printMemory(snapshot)
-	printTopProcesses(snapshot.Processes, *topCount)
-	printContainers(containers, processByPID)
+	if *interval == 0 {
+		if err := runCycle(config); err != nil {
+			log.Fatalf("falló el ciclo de telemetría: %v", err)
+		}
 
-	candidates := buildPolicyCandidates(containers, processByPID)
+		return
+	}
 
-	policyResult := policy.Evaluate(
-		candidates,
-		*lowTarget,
-		*highTarget,
+	if *interval < time.Second {
+		log.Fatal("el intervalo periódico debe ser de al menos 1 segundo")
+	}
+
+	stopSignals := make(chan os.Signal, 1)
+
+	signal.Notify(
+		stopSignals,
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer signal.Stop(stopSignals)
+
+	ticker := time.NewTicker(*interval)
+	defer ticker.Stop()
+
+	fmt.Printf(
+		"Daemon periódico iniciado: intervalo=%s\n",
+		interval.String(),
 	)
 
-	printPolicyPlan(policyResult, *execute)
+	run := func() {
+		fmt.Printf(
+			"\nCiclo iniciado: %s\n",
+			time.Now().UTC().Format(time.RFC3339),
+		)
 
-	if *execute {
-		if err := executePolicy(ctx, dockerClient, policyResult); err != nil {
-			log.Fatalf("la política terminó con errores: %v", err)
+		if err := runCycle(config); err != nil {
+			log.Printf("el ciclo terminó con error: %v", err)
 		}
 	}
 
-	if err := persistTelemetry(
-		ctx,
-		*valkeyAddress,
-		snapshot,
-		containers,
-		processByPID,
-		policyResult,
-		*execute,
-	); err != nil {
-		log.Fatalf("no se pudo persistir la telemetría: %v", err)
+	run()
+
+	for {
+		select {
+		case <-ticker.C:
+			run()
+
+		case receivedSignal := <-stopSignals:
+			fmt.Printf(
+				"\nSeñal %s recibida; cerrando el daemon\n",
+				receivedSignal,
+			)
+			return
+		}
 	}
 
-	fmt.Println("Telemetría almacenada correctamente en Valkey")
 }
 
 func printMemory(snapshot telemetry.Snapshot) {
