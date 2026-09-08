@@ -29,8 +29,43 @@ services:
     networks:
       - monitoring
 
+  grafana:
+    image: grafana/grafana:13.0.2
+    container_name: so1-grafana
+    depends_on:
+      valkey:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-so1-202100054}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_PLUGINS_PREINSTALL: redis-datasource@2.2.0
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./provisioning:/etc/grafana/provisioning:ro
+    restart: unless-stopped
+    labels:
+      so1.project: proyecto2
+      so1.profile: monitoring
+      so1.tier: system
+      so1.protected: "true"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:3000/api/health >/dev/null 2>&1 || exit 1"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - monitoring
+
 volumes:
   valkey-data:
+  grafana-data:
 
 networks:
   monitoring:
