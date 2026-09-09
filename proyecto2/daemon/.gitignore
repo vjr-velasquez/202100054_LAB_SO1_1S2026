@@ -1,3 +1,4 @@
 /daemon
 /bin/
 /coverage.out
+/ebpf-test
