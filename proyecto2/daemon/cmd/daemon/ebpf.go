@@ -12,6 +12,7 @@ import (
 
 func startEBPFMonitor(
 	valkeyAddress string,
+	tracker *deletionTracker,
 ) (func(), error) {
 	store, err := storage.New(valkeyAddress)
 	if err != nil {
@@ -67,11 +68,29 @@ func startEBPFMonitor(
 					"el monitor eBPF terminó con error: %v",
 					err,
 				)
+				if tracker != nil {
+					tracker.Disable(err)
+				}
 				return
 			}
 
+			relevant := false
+			if tracker != nil {
+				switch event.Source {
+				case ebpfwatcher.EventSourceSysKill:
+					relevant = tracker.MatchesPendingSysKill(event)
+				case ebpfwatcher.EventSourceSignalGenerate:
+					relevant = tracker.Observe(event)
+				}
+			}
+
+			if !relevant {
+				continue
+			}
+
 			fmt.Printf(
-				"eBPF kill: emisor=%d objetivo=%d señal=%d comando=%s\n",
+				"eBPF kill: origen=%s emisor=%d objetivo=%d señal=%d comando=%s\n",
+				event.Source,
 				event.CallerPID,
 				event.TargetPID,
 				event.Signal,

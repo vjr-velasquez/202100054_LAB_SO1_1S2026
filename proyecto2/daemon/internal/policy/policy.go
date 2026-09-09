@@ -11,13 +11,16 @@ const (
 )
 
 type Candidate struct {
-	ID        string
-	Name      string
-	Profile   string
-	Tier      string
-	Protected bool
-	CPU       float64
-	RSSKB     uint64
+	ID            string
+	Name          string
+	PID           int
+	Profile       string
+	Tier          string
+	Protected     bool
+	CPU           float64
+	MemoryPercent float64
+	VSZKB         uint64
+	RSSKB         uint64
 }
 
 type Decision struct {
@@ -83,21 +86,33 @@ func Evaluate(
 	}
 
 	sort.SliceStable(lowCandidates, func(i, j int) bool {
-		if lowCandidates[i].CPU != lowCandidates[j].CPU {
-			return lowCandidates[i].CPU < lowCandidates[j].CPU
+		if lowCandidates[i].MemoryPercent != lowCandidates[j].MemoryPercent {
+			return lowCandidates[i].MemoryPercent < lowCandidates[j].MemoryPercent
+		}
+		if lowCandidates[i].VSZKB != lowCandidates[j].VSZKB {
+			return lowCandidates[i].VSZKB < lowCandidates[j].VSZKB
 		}
 		if lowCandidates[i].RSSKB != lowCandidates[j].RSSKB {
 			return lowCandidates[i].RSSKB < lowCandidates[j].RSSKB
+		}
+		if lowCandidates[i].CPU != lowCandidates[j].CPU {
+			return lowCandidates[i].CPU < lowCandidates[j].CPU
 		}
 		return lowCandidates[i].ID < lowCandidates[j].ID
 	})
 
 	sort.SliceStable(highCandidates, func(i, j int) bool {
-		if highCandidates[i].CPU != highCandidates[j].CPU {
-			return highCandidates[i].CPU > highCandidates[j].CPU
+		if highCandidates[i].MemoryPercent != highCandidates[j].MemoryPercent {
+			return highCandidates[i].MemoryPercent > highCandidates[j].MemoryPercent
+		}
+		if highCandidates[i].VSZKB != highCandidates[j].VSZKB {
+			return highCandidates[i].VSZKB > highCandidates[j].VSZKB
 		}
 		if highCandidates[i].RSSKB != highCandidates[j].RSSKB {
 			return highCandidates[i].RSSKB > highCandidates[j].RSSKB
+		}
+		if highCandidates[i].CPU != highCandidates[j].CPU {
+			return highCandidates[i].CPU > highCandidates[j].CPU
 		}
 		return highCandidates[i].ID < highCandidates[j].ID
 	})

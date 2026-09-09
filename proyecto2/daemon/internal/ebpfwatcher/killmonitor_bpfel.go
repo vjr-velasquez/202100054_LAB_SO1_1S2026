@@ -54,7 +54,8 @@ type killMonitorSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type killMonitorProgramSpecs struct {
-	TraceKill *ebpf.ProgramSpec `ebpf:"trace_kill"`
+	TraceKill           *ebpf.ProgramSpec `ebpf:"trace_kill"`
+	TraceSignalGenerate *ebpf.ProgramSpec `ebpf:"trace_signal_generate"`
 }
 
 // killMonitorMapSpecs contains maps before they are loaded into the kernel.
@@ -109,12 +110,14 @@ type killMonitorVariables struct {
 //
 // It can be passed to loadKillMonitorObjects or ebpf.CollectionSpec.LoadAndAssign.
 type killMonitorPrograms struct {
-	TraceKill *ebpf.Program `ebpf:"trace_kill"`
+	TraceKill           *ebpf.Program `ebpf:"trace_kill"`
+	TraceSignalGenerate *ebpf.Program `ebpf:"trace_signal_generate"`
 }
 
 func (p *killMonitorPrograms) Close() error {
 	return _KillMonitorClose(
 		p.TraceKill,
+		p.TraceSignalGenerate,
 	)
 }
 

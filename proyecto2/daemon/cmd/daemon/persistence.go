@@ -12,12 +12,14 @@ import (
 )
 
 type persistedSample struct {
-	Timestamp  time.Time             `json:"timestamp"`
-	Mode       string                `json:"mode"`
-	Memory     telemetry.MemoryStats `json:"memory"`
-	Containers []persistedContainer  `json:"containers"`
-	Decisions  []persistedDecision   `json:"decisions"`
-	Summary    persistedSummary      `json:"summary"`
+	Timestamp      time.Time             `json:"timestamp"`
+	Mode           string                `json:"mode"`
+	ContainerState string                `json:"container_state"`
+	DecisionState  string                `json:"decision_state"`
+	Memory         telemetry.MemoryStats `json:"memory"`
+	Containers     []persistedContainer  `json:"containers"`
+	Decisions      []persistedDecision   `json:"decisions"`
+	Summary        persistedSummary      `json:"summary"`
 }
 
 type persistedContainer struct {
@@ -35,15 +37,17 @@ type persistedContainer struct {
 }
 
 type persistedDecision struct {
-	ID        string        `json:"id"`
-	Name      string        `json:"name"`
-	Profile   string        `json:"profile"`
-	Tier      string        `json:"tier"`
-	Protected bool          `json:"protected"`
-	Action    policy.Action `json:"action"`
-	Reason    string        `json:"reason"`
-	CPU       float64       `json:"cpu_percent"`
-	RSSKB     uint64        `json:"rss_kb"`
+	ID            string        `json:"id"`
+	Name          string        `json:"name"`
+	Profile       string        `json:"profile"`
+	Tier          string        `json:"tier"`
+	Protected     bool          `json:"protected"`
+	Action        policy.Action `json:"action"`
+	Reason        string        `json:"reason"`
+	CPU           float64       `json:"cpu_percent"`
+	MemoryPercent float64       `json:"memory_percent"`
+	VSZKB         uint64        `json:"vsz_kb"`
+	RSSKB         uint64        `json:"rss_kb"`
 }
 
 type persistedSummary struct {
@@ -73,14 +77,18 @@ func persistTelemetry(
 	}
 
 	mode := "dry-run"
+	containerState := "evaluated"
 	if execute {
 		mode = "execute"
+		containerState = "post-execution"
 	}
 
 	sample := persistedSample{
-		Timestamp: time.Now().UTC(),
-		Mode:      mode,
-		Memory:    snapshot.Memory,
+		Timestamp:      time.Now().UTC(),
+		Mode:           mode,
+		ContainerState: containerState,
+		DecisionState:  "pre-execution",
+		Memory:         snapshot.Memory,
 		Summary: persistedSummary{
 			LowKept:     result.LowKept,
 			HighKept:    result.HighKept,
@@ -114,15 +122,17 @@ func persistTelemetry(
 		sample.Decisions = append(
 			sample.Decisions,
 			persistedDecision{
-				ID:        decision.Candidate.ID,
-				Name:      decision.Candidate.Name,
-				Profile:   decision.Candidate.Profile,
-				Tier:      decision.Candidate.Tier,
-				Protected: decision.Candidate.Protected,
-				Action:    decision.Action,
-				Reason:    decision.Reason,
-				CPU:       decision.Candidate.CPU,
-				RSSKB:     decision.Candidate.RSSKB,
+				ID:            decision.Candidate.ID,
+				Name:          decision.Candidate.Name,
+				Profile:       decision.Candidate.Profile,
+				Tier:          decision.Candidate.Tier,
+				Protected:     decision.Candidate.Protected,
+				Action:        decision.Action,
+				Reason:        decision.Reason,
+				CPU:           decision.Candidate.CPU,
+				MemoryPercent: decision.Candidate.MemoryPercent,
+				VSZKB:         decision.Candidate.VSZKB,
+				RSSKB:         decision.Candidate.RSSKB,
 			},
 		)
 	}
