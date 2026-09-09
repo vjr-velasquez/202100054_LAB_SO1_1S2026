@@ -15,13 +15,21 @@ import (
 
 const rawKillEventSize = 40
 
+type EventSource string
+
+const (
+	EventSourceSysKill        EventSource = "sys_kill"
+	EventSourceSignalGenerate EventSource = "signal_generate"
+)
+
 type Event struct {
-	TimestampNS uint64    `json:"timestamp_ns"`
-	ObservedAt  time.Time `json:"observed_at"`
-	CallerPID   uint32    `json:"caller_pid"`
-	TargetPID   int32     `json:"target_pid"`
-	Signal      int32     `json:"signal"`
-	Command     string    `json:"command"`
+	TimestampNS uint64      `json:"timestamp_ns"`
+	ObservedAt  time.Time   `json:"observed_at"`
+	CallerPID   uint32      `json:"caller_pid"`
+	TargetPID   int32       `json:"target_pid"`
+	Signal      int32       `json:"signal"`
+	Command     string      `json:"command"`
+	Source      EventSource `json:"source"`
 }
 
 type rawKillEvent struct {
@@ -30,13 +38,14 @@ type rawKillEvent struct {
 	TargetPID   int32
 	Signal      int32
 	Command     [16]byte
-	Padding     [4]byte
+	Source      uint32
 }
 
 type Watcher struct {
-	objects    killMonitorObjects
-	tracepoint link.Link
-	reader     *ringbuf.Reader
+	objects          killMonitorObjects
+	killTracepoint   link.Link
+	signalTracepoint link.Link
+	reader           *ringbuf.Reader
 }
 
 func New() (*Watcher, error) {
@@ -59,7 +68,7 @@ func New() (*Watcher, error) {
 		)
 	}
 
-	tracepoint, err := link.Tracepoint(
+	killTracepoint, err := link.Tracepoint(
 		"raw_syscalls",
 		"sys_enter",
 		watcher.objects.TraceKill,
@@ -76,7 +85,7 @@ func New() (*Watcher, error) {
 
 	reader, err := ringbuf.NewReader(watcher.objects.Events)
 	if err != nil {
-		_ = tracepoint.Close()
+		_ = killTracepoint.Close()
 		_ = watcher.objects.Close()
 
 		return nil, fmt.Errorf(
@@ -85,7 +94,25 @@ func New() (*Watcher, error) {
 		)
 	}
 
-	watcher.tracepoint = tracepoint
+	signalTracepoint, err := link.Tracepoint(
+		"signal",
+		"signal_generate",
+		watcher.objects.TraceSignalGenerate,
+		nil,
+	)
+	if err != nil {
+		_ = reader.Close()
+		_ = killTracepoint.Close()
+		_ = watcher.objects.Close()
+
+		return nil, fmt.Errorf(
+			"conectar tracepoint signal/signal_generate: %w",
+			err,
+		)
+	}
+
+	watcher.killTracepoint = killTracepoint
+	watcher.signalTracepoint = signalTracepoint
 	watcher.reader = reader
 
 	return watcher, nil
@@ -112,19 +139,25 @@ func (watcher *Watcher) Read() (Event, error) {
 
 func (watcher *Watcher) Close() error {
 	var readerError error
-	var tracepointError error
+	var killTracepointError error
+	var signalTracepointError error
 
 	if watcher.reader != nil {
 		readerError = watcher.reader.Close()
 	}
 
-	if watcher.tracepoint != nil {
-		tracepointError = watcher.tracepoint.Close()
+	if watcher.killTracepoint != nil {
+		killTracepointError = watcher.killTracepoint.Close()
+	}
+
+	if watcher.signalTracepoint != nil {
+		signalTracepointError = watcher.signalTracepoint.Close()
 	}
 
 	return errors.Join(
 		readerError,
-		tracepointError,
+		killTracepointError,
+		signalTracepointError,
 		watcher.objects.Close(),
 	)
 }
@@ -151,11 +184,26 @@ func decodeKillEvent(sample []byte) (Event, error) {
 		)
 	}
 
+	var source EventSource
+
+	switch rawEvent.Source {
+	case 1:
+		source = EventSourceSysKill
+	case 2:
+		source = EventSourceSignalGenerate
+	default:
+		return Event{}, fmt.Errorf(
+			"origen de evento eBPF desconocido: %d",
+			rawEvent.Source,
+		)
+	}
+
 	return Event{
 		TimestampNS: rawEvent.TimestampNS,
 		CallerPID:   rawEvent.CallerPID,
 		TargetPID:   rawEvent.TargetPID,
 		Signal:      rawEvent.Signal,
+		Source:      source,
 		Command: strings.TrimRight(
 			string(rawEvent.Command[:]),
 			"\x00",

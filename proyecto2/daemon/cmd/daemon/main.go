@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -119,9 +120,13 @@ func main() {
 		defer cleanupLifecycle()
 	}
 
+	var tracker *deletionTracker
 	if *enableEBPF {
+		tracker = newDeletionTracker()
+
 		cleanupEBPF, err := startEBPFMonitor(
 			*valkeyAddress,
+			tracker,
 		)
 		if err != nil {
 			log.Printf(
@@ -137,13 +142,14 @@ func main() {
 	dockerClient := dockerclient.New(*dockerSocket)
 
 	config := cycleConfig{
-		procPath:      *procPath,
-		valkeyAddress: *valkeyAddress,
-		topCount:      *topCount,
-		lowTarget:     *lowTarget,
-		highTarget:    *highTarget,
-		execute:       *execute,
-		dockerClient:  dockerClient,
+		procPath:        *procPath,
+		valkeyAddress:   *valkeyAddress,
+		topCount:        *topCount,
+		lowTarget:       *lowTarget,
+		highTarget:      *highTarget,
+		execute:         *execute,
+		dockerClient:    dockerClient,
+		deletionTracker: tracker,
 	}
 
 	if *interval == 0 {
@@ -300,13 +306,16 @@ func buildPolicyCandidates(
 		process := processByPID[container.PID]
 
 		candidates = append(candidates, policy.Candidate{
-			ID:        container.ID,
-			Name:      container.Name,
-			Profile:   container.Profile,
-			Tier:      container.Tier,
-			Protected: container.Protected,
-			CPU:       process.CPUPercent,
-			RSSKB:     process.ResidentSizeKB,
+			ID:            container.ID,
+			Name:          container.Name,
+			PID:           container.PID,
+			Profile:       container.Profile,
+			Tier:          container.Tier,
+			Protected:     container.Protected,
+			CPU:           process.CPUPercent,
+			MemoryPercent: process.MemoryPercent,
+			VSZKB:         process.VirtualSizeKB,
+			RSSKB:         process.ResidentSizeKB,
 		})
 	}
 
@@ -324,14 +333,16 @@ func printPolicyPlan(result policy.Result, execute bool) {
 	for _, decision := range result.Decisions {
 		fmt.Printf(
 			"[%s] ID=%.12s nombre=%s perfil=%s tier=%s "+
-				"CPU=%.2f%% RSS=%d KB motivo=%s\n",
+				"memoria=%.2f%% VSZ=%d KB RSS=%d KB CPU=%.2f%% motivo=%s\n",
 			decision.Action,
 			decision.Candidate.ID,
 			decision.Candidate.Name,
 			decision.Candidate.Profile,
 			decision.Candidate.Tier,
-			decision.Candidate.CPU,
+			decision.Candidate.MemoryPercent,
+			decision.Candidate.VSZKB,
 			decision.Candidate.RSSKB,
+			decision.Candidate.CPU,
 			decision.Reason,
 		)
 	}
@@ -354,29 +365,82 @@ func executePolicy(
 	ctx context.Context,
 	client *dockerclient.Client,
 	result policy.Result,
+	tracker *deletionTracker,
+	valkeyAddress string,
 ) error {
 	removedCount := 0
+	var removalErrors []error
 
 	for _, decision := range result.Decisions {
 		if decision.Action != policy.ActionRemove {
 			continue
 		}
 
+		candidate := decision.Candidate
+
 		fmt.Printf(
-			"Eliminando ID=%.12s nombre=%s...\n",
-			decision.Candidate.ID,
-			decision.Candidate.Name,
+			"Eliminando ID=%.12s nombre=%s PID=%d...\n",
+			candidate.ID,
+			candidate.Name,
+			candidate.PID,
 		)
 
-		if err := client.RemoveProjectContainer(
-			ctx,
-			decision.Candidate.ID,
-		); err != nil {
-			return fmt.Errorf(
-				"eliminar %s: %w",
-				decision.Candidate.Name,
-				err,
+		if tracker != nil {
+			event, removed, err := removeConfirmedContainer(
+				ctx,
+				client,
+				valkeyAddress,
+				candidate,
+				tracker,
 			)
+			if err != nil {
+				if removed {
+					removedCount++
+					removalErrors = append(
+						removalErrors,
+						fmt.Errorf(
+							"el contenedor %s fue eliminado, pero no se pudo registrar la confirmación: %w",
+							candidate.Name,
+							err,
+						),
+					)
+					continue
+				}
+
+				removalErrors = append(
+					removalErrors,
+					fmt.Errorf(
+						"eliminar %s con confirmación eBPF: %w",
+						candidate.Name,
+						err,
+					),
+				)
+				continue
+			}
+
+			fmt.Printf(
+				"Eliminación confirmada por eBPF y almacenada: "+
+					"emisor=%d objetivo=%d señal=%d comando=%s\n",
+				event.CallerPID,
+				event.TargetPID,
+				event.Signal,
+				event.Command,
+			)
+		} else {
+			if err := client.RemoveProjectContainer(
+				ctx,
+				candidate.ID,
+			); err != nil {
+				removalErrors = append(
+					removalErrors,
+					fmt.Errorf(
+						"eliminar %s: %w",
+						candidate.Name,
+						err,
+					),
+				)
+				continue
+			}
 		}
 
 		removedCount++
@@ -387,5 +451,5 @@ func executePolicy(
 		removedCount,
 	)
 
-	return nil
+	return errors.Join(removalErrors...)
 }

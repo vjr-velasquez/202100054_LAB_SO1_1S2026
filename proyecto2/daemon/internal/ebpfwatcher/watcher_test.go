@@ -11,7 +11,8 @@ func TestDecodeKillEvent(t *testing.T) {
 		TimestampNS: 123456,
 		CallerPID:   1000,
 		TargetPID:   2000,
-		Signal:      15,
+		Signal:      9,
+		Source:      2,
 	}
 
 	copy(rawEvent.Command[:], "so1-test")
@@ -43,8 +44,12 @@ func TestDecodeKillEvent(t *testing.T) {
 		t.Errorf("target PID=%d", event.TargetPID)
 	}
 
-	if event.Signal != 15 {
+	if event.Signal != 9 {
 		t.Errorf("signal=%d", event.Signal)
+	}
+
+	if event.Source != EventSourceSignalGenerate {
+		t.Errorf("source=%s", event.Source)
 	}
 
 	if event.Command != "so1-test" {

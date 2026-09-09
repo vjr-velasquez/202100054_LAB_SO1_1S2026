@@ -2,7 +2,10 @@
 #include <bpf/bpf_helpers.h>
 
 #define SYS_KILL_X86_64 62
+#define SIGKILL_VALUE 9
 #define TASK_COMM_LEN 16
+#define EVENT_SOURCE_SYS_KILL 1
+#define EVENT_SOURCE_SIGNAL_GENERATE 2
 
 char LICENSE[] SEC("license") = "GPL";
 
@@ -12,6 +15,7 @@ struct kill_event {
     __s32 target_pid;
     __s32 signal;
     char command[TASK_COMM_LEN];
+    __u32 source;
 };
 
 struct {
@@ -44,6 +48,38 @@ int trace_kill(struct trace_event_raw_sys_enter *context)
     event->caller_pid = pid_tgid >> 32;
     event->target_pid = (__s32)context->args[0];
     event->signal = signal;
+    event->source = EVENT_SOURCE_SYS_KILL;
+
+    bpf_get_current_comm(
+        event->command,
+        sizeof(event->command)
+    );
+
+    bpf_ringbuf_submit(event, 0);
+
+    return 0;
+}
+
+SEC("tracepoint/signal/signal_generate")
+int trace_signal_generate(struct trace_event_raw_signal_generate *context)
+{
+    struct kill_event *event;
+    __u64 pid_tgid;
+
+    if (context->sig != SIGKILL_VALUE)
+        return 0;
+
+    event = bpf_ringbuf_reserve(&events, sizeof(*event), 0);
+    if (!event)
+        return 0;
+
+    pid_tgid = bpf_get_current_pid_tgid();
+
+    event->timestamp_ns = bpf_ktime_get_ns();
+    event->caller_pid = pid_tgid >> 32;
+    event->target_pid = context->pid;
+    event->signal = context->sig;
+    event->source = EVENT_SOURCE_SIGNAL_GENERATE;
 
     bpf_get_current_comm(
         event->command,

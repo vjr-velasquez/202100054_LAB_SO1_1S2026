@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/vjr-velasquez/202100054_LAB_SO1_1S2026/proyecto2/daemon/internal/dockerclient"
@@ -50,6 +51,7 @@ func replenishContainers(
 		0,
 		len(profiles),
 	)
+	var creationErrors []error
 
 	for _, profile := range profiles {
 		fmt.Printf(
@@ -62,11 +64,15 @@ func replenishContainers(
 			profile,
 		)
 		if err != nil {
-			return createdContainers, fmt.Errorf(
-				"crear perfil %s: %w",
-				profile,
-				err,
+			creationErrors = append(
+				creationErrors,
+				fmt.Errorf(
+					"crear perfil %s: %w",
+					profile,
+					err,
+				),
 			)
+			continue
 		}
 
 		createdContainers = append(
@@ -88,5 +94,5 @@ func replenishContainers(
 		len(createdContainers),
 	)
 
-	return createdContainers, nil
+	return createdContainers, errors.Join(creationErrors...)
 }

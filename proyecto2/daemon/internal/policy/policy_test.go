@@ -86,3 +86,41 @@ func TestEvaluateReportsDeficitsAndSkipsUnknown(t *testing.T) {
 		}
 	}
 }
+
+func TestEvaluateOrdersByMemoryVSZRSSCPUAndID(t *testing.T) {
+	candidates := []Candidate{
+		{ID: "low-memory", Tier: "low", MemoryPercent: 1, VSZKB: 999, RSSKB: 999, CPU: 99},
+		{ID: "low-vsz", Tier: "low", MemoryPercent: 2, VSZKB: 1, RSSKB: 999, CPU: 99},
+		{ID: "low-rss", Tier: "low", MemoryPercent: 2, VSZKB: 2, RSSKB: 1, CPU: 99},
+		{ID: "low-cpu", Tier: "low", MemoryPercent: 2, VSZKB: 2, RSSKB: 2, CPU: 1},
+		{ID: "low-id-a", Tier: "low", MemoryPercent: 2, VSZKB: 2, RSSKB: 2, CPU: 2},
+		{ID: "low-id-b", Tier: "low", MemoryPercent: 2, VSZKB: 2, RSSKB: 2, CPU: 2},
+		{ID: "high-memory", Tier: "high", MemoryPercent: 9, VSZKB: 1, RSSKB: 1, CPU: 1},
+		{ID: "high-vsz", Tier: "high", MemoryPercent: 8, VSZKB: 9, RSSKB: 1, CPU: 1},
+		{ID: "high-rss", Tier: "high", MemoryPercent: 8, VSZKB: 8, RSSKB: 9, CPU: 1},
+		{ID: "high-cpu", Tier: "high", MemoryPercent: 8, VSZKB: 8, RSSKB: 8, CPU: 9},
+		{ID: "high-id-a", Tier: "high", MemoryPercent: 8, VSZKB: 8, RSSKB: 8, CPU: 8},
+		{ID: "high-id-b", Tier: "high", MemoryPercent: 8, VSZKB: 8, RSSKB: 8, CPU: 8},
+	}
+
+	result := Evaluate(candidates, 6, 6)
+	want := []string{
+		"low-memory", "low-vsz", "low-rss", "low-cpu", "low-id-a", "low-id-b",
+		"high-memory", "high-vsz", "high-rss", "high-cpu", "high-id-a", "high-id-b",
+	}
+
+	if len(result.Decisions) != len(want) {
+		t.Fatalf("decisiones=%d; se esperaban %d", len(result.Decisions), len(want))
+	}
+
+	for index, expectedID := range want {
+		if result.Decisions[index].Candidate.ID != expectedID {
+			t.Errorf(
+				"posición %d: ID=%s; se esperaba %s",
+				index,
+				result.Decisions[index].Candidate.ID,
+				expectedID,
+			)
+		}
+	}
+}
