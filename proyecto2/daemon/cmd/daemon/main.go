@@ -52,6 +52,12 @@ func main() {
 		"levantar infraestructura, módulo y cronjob automáticamente",
 	)
 
+	enableEBPF := flag.Bool(
+		"ebpf",
+		true,
+		"capturar y almacenar señales kill mediante eBPF",
+	)
+
 	topCount := flag.Int(
 		"top",
 		5,
@@ -111,6 +117,21 @@ func main() {
 		}
 
 		defer cleanupLifecycle()
+	}
+
+	if *enableEBPF {
+		cleanupEBPF, err := startEBPFMonitor(
+			*valkeyAddress,
+		)
+		if err != nil {
+			log.Printf(
+				"no se pudo iniciar eBPF: %v",
+				err,
+			)
+			return
+		}
+
+		defer cleanupEBPF()
 	}
 
 	dockerClient := dockerclient.New(*dockerSocket)
