@@ -21,7 +21,7 @@ no están definidos por el enunciado son decisiones de diseño, no requisitos at
 | `country` | String exacto en mayúsculas: `USA`, `RUS`, `CHN`, `ESP`, `GTM`. |
 | `warplanes_in_air` | Entero JSON, inclusivo 0–50; rechazar nulos, strings y fracciones. |
 | `warships_in_water` | Entero JSON, inclusivo 0–30; rechazar nulos, strings y fracciones. |
-| `timestamp` | Fecha RFC 3339 con zona; normalizar UTC. Admitir fracciones de segundo. Rechazar fechas imposibles o sin zona. |
+| `timestamp` | Fecha RFC 3339 con zona; normalizar UTC. Admitir hasta seis decimales de segundo, sin truncamiento silencioso. Rechazar fechas imposibles o sin zona. |
 
 Los cuatro campos son obligatorios; propuesta: rechazar campos extra para detectar
 errores de contrato. No rechazar reportes históricos válidos por antigüedad: el

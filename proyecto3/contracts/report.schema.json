@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mumn:report:v1",
+  "title": "WarReport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["country", "warplanes_in_air", "warships_in_water", "timestamp"],
+  "properties": {
+    "country": {"type": "string", "enum": ["USA", "RUS", "CHN", "ESP", "GTM"]},
+    "warplanes_in_air": {"type": "integer", "minimum": 0, "maximum": 50},
+    "warships_in_water": {"type": "integer", "minimum": 0, "maximum": 30},
+    "timestamp": {"type": "string", "format": "date-time"}
+  }
+}

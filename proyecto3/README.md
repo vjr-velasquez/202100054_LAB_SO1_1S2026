@@ -19,6 +19,17 @@ aprovisionar recursos, publicar imágenes o modificar accesos al repositorio.
 2. [Contratos de datos, comunicación y métricas](docs/planificacion/02-contratos.md).
 3. [Matriz de requisitos, aceptación y gancho de calidad](docs/planificacion/03-requisitos-y-validacion.md).
 4. [Trabajo por ramas y publicación](docs/ramas.md).
+5. [Fase 2: estructura y validaciones locales](docs/fase2-estructura.md).
+
+Comprobación local desde la raíz del repositorio:
+
+```bash
+make -C proyecto3 check
+```
+
+Comprueba el esqueleto, los contratos y los datos de referencia; todavía no acredita
+servicios implementados ni integración. `make -C proyecto3 doctor` muestra las
+herramientas pendientes del entorno completo.
 
 Las propuestas de diseño son la base aprobada para el desarrollo. Las contradicciones de
 la cátedra siguen pendientes hasta contar con aclaración o adoptar una interpretación
