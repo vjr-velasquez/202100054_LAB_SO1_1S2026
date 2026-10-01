@@ -1,0 +1,130 @@
+name: mumn-p3
+
+x-go: &go
+  image: mumn-go:phase3
+  restart: unless-stopped
+
+services:
+  rabbitmq:
+    image: rabbitmq:4.1-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: mumn
+      RABBITMQ_DEFAULT_PASS: local-development-only
+    volumes:
+      - rabbit-data:/var/lib/rabbitmq
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, ping]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  valkey:
+    image: valkey/valkey:8.1.10-alpine
+    command: [valkey-server, --appendonly, 'yes', --appendfsync, everysec, --maxmemory, 128mb, --maxmemory-policy, noeviction]
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: [CMD, valkey-cli, ping]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    restart: unless-stopped
+
+  go-api:
+    <<: *go
+    build: ../services/go
+    command: [api]
+    environment:
+      GRPC_BRIDGE_URL: http://127.0.0.1:8082/reports
+
+  grpc-client:
+    <<: *go
+    network_mode: service:go-api
+    command: [grpc-client]
+    environment:
+      GRPC_TARGET: grpc-server:50051
+    depends_on:
+      go-api:
+        condition: service_started
+      grpc-server:
+        condition: service_started
+
+  grpc-server:
+    <<: *go
+    command: [grpc-server]
+    environment:
+      WRITER_URL: http://127.0.0.1:8083/publish
+
+  writer:
+    <<: *go
+    network_mode: service:grpc-server
+    command: [writer]
+    environment:
+      RABBITMQ_URL: amqp://mumn:local-development-only@rabbitmq:5672/
+    depends_on:
+      grpc-server:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+
+  consumer:
+    <<: *go
+    command: [consumer]
+    environment:
+      RABBITMQ_URL: amqp://mumn:local-development-only@rabbitmq:5672/
+      VALKEY_ADDR: valkey:6379
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+
+  rust-api:
+    image: mumn-rust:phase3
+    build: ../services/rust-api
+    environment:
+      GO_API_URL: http://go-api:8081/reports
+      RUN_ID: local
+    ports:
+      - '127.0.0.1:${MUMN_PORT:-18080}:8080'
+    depends_on:
+      grpc-client:
+        condition: service_started
+      writer:
+        condition: service_started
+      consumer:
+        condition: service_started
+    restart: unless-stopped
+
+  go-tests:
+    profiles: [test]
+    image: golang:1.24-alpine
+    working_dir: /src
+    volumes:
+      - ../services/go:/src:ro
+    environment:
+      RABBITMQ_URL: amqp://mumn:local-development-only@rabbitmq:5672/
+      VALKEY_ADDR: valkey:6379
+    command: [go, test, -tags=integration, ./...]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+
+  locust:
+    profiles: [load]
+    image: locustio/locust:2.32.10
+    volumes:
+      - ../load:/load:ro
+    environment:
+      RUN_ID: ${RUN_ID:-locust-local}
+    command: [-f, /load/locustfile.py, --host, 'http://rust-api:8080', --headless, -u, '2', -r, '2', -t, 10s, --only-summary]
+    depends_on:
+      rust-api:
+        condition: service_started
+
+volumes:
+  rabbit-data:
+  valkey-data:
