@@ -1,0 +1,5 @@
+#!/bin/sh
+# Plantilla opcional. No está activada automáticamente en Git.
+set -eu
+repo_dir=$(git rev-parse --show-toplevel)
+exec make -C "$repo_dir/proyecto3" check
