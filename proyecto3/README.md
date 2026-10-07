@@ -11,13 +11,27 @@ Locust/HTTP → Rust → Go API → Go cliente gRPC → Go servidor gRPC
 ```
 
 La rama `proyecto3-fase3-flujo` incorpora servicios reales y pruebas de integración.
-El entorno Compose es de desarrollo: GKE, Gateway API, Zot, Operator, dashboards,
-HPA y comparación de réplicas corresponden a las fases siguientes.
+El entorno Compose es de desarrollo. La fase 4 agrega Operator y dashboards en
+Kubernetes local. GKE, Gateway API, Zot, HPA y comparación de réplicas siguen pendientes.
 
 Los dos roles de entrada y los dos de publicación son contenedores separados.
 Cada pareja comparte red para comunicarse por loopback, como los futuros pods.
 La cantidad final de deployments publicadores y la topología de réplicas Valkey
 siguen pendientes de aclaración del enunciado.
+
+## Fase 4: Operator y Grafana en Kubernetes local
+
+La rama `proyecto3-fase4-operator-grafana` agrega Operator SDK Helm,
+`ValkeyInstance`, `GrafanaInstance`, persistencia y 11 paneles con consultas reales.
+
+```bash
+make -C proyecto3 phase4-up
+make -C proyecto3 check-charts
+make -C proyecto3 check-cluster
+```
+
+Ver [acceso a Grafana, arquitectura y límites](operator/README.md). Este clúster
+kind independiente valida la fase 4; el despliegue en GCP/GKE sigue en fase 5.
 
 ## Ejecutar
 
@@ -69,7 +83,7 @@ make -C proyecto3 check-integration
 ```
 
 - `check-reference`: 14 pruebas Python y comprobaciones del esqueleto/contratos.
-- `check`: lo anterior, compilación Go/Rust, pruebas unitarias y `go vet`.
+- `check`: lo anterior, compilación Go/Rust, pruebas unitarias, `go vet` y validación Helm/Kustomize.
 - `check-integration`: inicia el entorno local, comprueba Lua/concurrencia/publicación
   y ejecuta nueve escenarios de extremo a extremo. Detiene temporalmente RabbitMQ,
   Valkey y reinicia el consumidor de **este proyecto** para comprobar recuperación.

@@ -1,9 +1,9 @@
 PYTHON ?= python3
 COMPOSE = docker compose -f deploy/compose.local.yaml
 
-.PHONY: check check-reference check-services doctor build local-up local-down check-integration check-cluster
+.PHONY: check check-reference check-services doctor build local-up local-down check-integration check-cluster phase4-up check-charts
 
-check: check-reference check-services
+check: check-reference check-services check-charts
 
 check-reference:
 	$(PYTHON) scripts/check.py
@@ -27,6 +27,14 @@ check-integration: local-up
 	$(COMPOSE) run --rm go-tests
 	$(PYTHON) scripts/integration.py
 
+phase4-up:
+	$(PYTHON) scripts/phase4-up.py
+
+check-charts:
+	$(PYTHON) scripts/k8s-tools.py
+	artifacts/tools/helm lint operator/helm-charts/valkeyinstance
+	artifacts/tools/helm lint operator/helm-charts/grafanainstance
+	artifacts/tools/kubectl kustomize operator/config/default > /dev/null
+
 check-cluster:
-	@echo 'PENDIENTE: Operator y GKE se verifican en las fases 4 y 5.' >&2
-	@exit 2
+	$(PYTHON) scripts/check-cluster.py

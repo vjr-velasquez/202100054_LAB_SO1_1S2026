@@ -17,6 +17,7 @@ import (
 	pb "github.com/vjr-velasquez/202100054_LAB_SO1_1S2026/proyecto3/services/go/gen/wartweets"
 	"github.com/vjr-velasquez/202100054_LAB_SO1_1S2026/proyecto3/services/go/internal/broker"
 	"github.com/vjr-velasquez/202100054_LAB_SO1_1S2026/proyecto3/services/go/internal/report"
+	"github.com/vjr-velasquez/202100054_LAB_SO1_1S2026/proyecto3/services/go/internal/stats"
 	"github.com/vjr-velasquez/202100054_LAB_SO1_1S2026/proyecto3/services/go/internal/storage"
 	"github.com/vjr-velasquez/202100054_LAB_SO1_1S2026/proyecto3/services/go/internal/transport"
 	"google.golang.org/grpc"
@@ -47,6 +48,17 @@ func main() {
 }
 func run(ctx context.Context, role string) error {
 	switch role {
+	case "stats":
+		store := storage.New(env("VALKEY_ADDR", "valkey:6379"))
+		defer store.Client.Close()
+		server := &http.Server{Addr: env("LISTEN_ADDR", ":8084"), Handler: stats.Handler(store), ReadHeaderTimeout: 3 * time.Second, WriteTimeout: 5 * time.Second}
+		go func() { <-ctx.Done(); _ = server.Close() }()
+		err := server.ListenAndServe()
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+
 	case "consumer":
 		return consume(ctx)
 	case "grpc-server":

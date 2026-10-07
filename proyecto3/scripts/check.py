@@ -108,7 +108,7 @@ def check_docs():
         if not (ROOT / name).exists():
             raise ValueError(f"falta estructura requerida: {name}")
     for path in ROOT.rglob("*.md"):
-        if path.relative_to(ROOT).parts[0] == "docs":
+        if any(part in {"docs", "artifacts", "target", ".git"} for part in path.relative_to(ROOT).parts):
             continue  # Documentos locales excluidos del repositorio.
         content = path.read_text()
         if sum(line.startswith("```") for line in content.splitlines()) % 2:
