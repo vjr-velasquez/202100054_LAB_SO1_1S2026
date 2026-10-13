@@ -6,12 +6,16 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 )
 
 type Manager struct {
 	projectRoot string
+	cronUser    string
 }
+
+type userLookup func(string) (*user.User, error)
 
 func New(projectRoot string) (*Manager, error) {
 	absoluteRoot, err := filepath.Abs(projectRoot)
@@ -44,9 +48,49 @@ func New(projectRoot string) (*Manager, error) {
 		}
 	}
 
+	cronUser, err := resolveCronUser(
+		os.Geteuid(),
+		os.Getenv("SUDO_USER"),
+		user.Lookup,
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"resolver usuario del cronjob: %w",
+			err,
+		)
+	}
+
 	return &Manager{
 		projectRoot: absoluteRoot,
+		cronUser:    cronUser,
 	}, nil
+}
+
+func resolveCronUser(
+	effectiveUID int,
+	sudoUser string,
+	lookup userLookup,
+) (string, error) {
+	if effectiveUID != 0 ||
+		sudoUser == "" ||
+		sudoUser == "root" {
+		return "", nil
+	}
+
+	account, err := lookup(sudoUser)
+	if err != nil {
+		return "", fmt.Errorf(
+			"buscar usuario %q: %w",
+			sudoUser,
+			err,
+		)
+	}
+
+	if account.Uid == "0" {
+		return "", nil
+	}
+
+	return account.Username, nil
 }
 
 func (manager *Manager) Start(ctx context.Context) error {
@@ -88,9 +132,8 @@ func (manager *Manager) Start(ctx context.Context) error {
 
 	fmt.Println("Instalando cronjob del proyecto...")
 
-	if err := manager.run(
+	if err := manager.runCronScript(
 		ctx,
-		"bash",
 		filepath.Join(
 			manager.projectRoot,
 			"cron/install_cron.sh",
@@ -122,9 +165,8 @@ func (manager *Manager) Start(ctx context.Context) error {
 func (manager *Manager) Stop(ctx context.Context) error {
 	fmt.Println("Retirando cronjob del proyecto...")
 
-	cronError := manager.run(
+	cronError := manager.runCronScript(
 		ctx,
-		"bash",
 		filepath.Join(
 			manager.projectRoot,
 			"cron/remove_cron.sh",
@@ -151,6 +193,39 @@ func (manager *Manager) Stop(ctx context.Context) error {
 	fmt.Println("Ciclo de vida finalizado correctamente")
 
 	return nil
+}
+
+func (manager *Manager) runCronScript(
+	ctx context.Context,
+	scriptPath string,
+) error {
+	name, arguments := cronCommand(
+		manager.cronUser,
+		scriptPath,
+	)
+
+	return manager.run(
+		ctx,
+		name,
+		arguments...,
+	)
+}
+
+func cronCommand(
+	cronUser string,
+	scriptPath string,
+) (string, []string) {
+	if cronUser == "" {
+		return "bash", []string{scriptPath}
+	}
+
+	return "sudo", []string{
+		"-u",
+		cronUser,
+		"--",
+		"bash",
+		scriptPath,
+	}
 }
 
 func (manager *Manager) run(

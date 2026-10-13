@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-provisioning
+data:
+  datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: MUMN
+        uid: mumn
+        type: yesoreyeram-infinity-datasource
+        access: proxy
+        isDefault: true
+        editable: false
+        jsonData:
+          allowedHosts: ["http://127.0.0.1:8084"]
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: mumn
+        orgId: 1
+        folder: MUMN
+        type: file
+        disableDeletion: false
+        allowUiUpdates: false
+        updateIntervalSeconds: 10
+        options: {path: /etc/grafana/dashboards}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-dashboard
+data:
+  mumn.json: |
+    {{- $dashboard := .Files.Get "dashboards/mumn.json" | fromJson }}
+    {{- $_ := set $dashboard "title" .Values.dashboardTitle }}
+    {{- $variable := index $dashboard.templating.list 0 }}
+    {{- $_ := set $variable "query" .Values.runId }}
+    {{- $_ := set $variable "current" (dict "text" .Values.runId "value" .Values.runId) }}
+    {{- $dashboard | toPrettyJson | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-grafana
+spec:
+  selector: {app: {{ .Release.Name }}-grafana}
+  ports:
+    - {name: http, port: 3000, targetPort: http}
+    - {name: stats, port: 8084, targetPort: stats}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: {{ .Release.Name }}-grafana}
+  template:
+    metadata:
+      labels: {app: {{ .Release.Name }}-grafana}
+      annotations:
+        config-checksum: {{ toJson .Values | sha256sum }}
+    spec:
+      securityContext: {fsGroup: 472, runAsNonRoot: true}
+      containers:
+        - name: grafana
+          image: {{ .Values.image | quote }}
+          imagePullPolicy: IfNotPresent
+          securityContext: {runAsUser: 472, runAsGroup: 472}
+          ports: [{name: http, containerPort: 3000}]
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom: {secretKeyRef: {name: {{ .Values.adminSecret }}, key: username}}
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ .Values.adminSecret }}, key: password}}
+            - {name: GF_USERS_ALLOW_SIGN_UP, value: "false"}
+          resources: {{ .Values.resources | toJson }}
+          readinessProbe:
+            httpGet: {path: /api/health, port: http}
+            initialDelaySeconds: 10
+          livenessProbe:
+            httpGet: {path: /api/health, port: http}
+            initialDelaySeconds: 30
+          volumeMounts:
+            - {name: provisioning, mountPath: /etc/grafana/provisioning/datasources/datasource.yaml, subPath: datasource.yaml}
+            - {name: provisioning, mountPath: /etc/grafana/provisioning/dashboards/dashboards.yaml, subPath: dashboards.yaml}
+            - {name: dashboards, mountPath: /etc/grafana/dashboards}
+        - name: adapter
+          image: {{ .Values.adapterImage | quote }}
+          imagePullPolicy: IfNotPresent
+          args: [stats]
+          securityContext: {runAsUser: 1000, runAsGroup: 1000}
+          env: [{name: VALKEY_ADDR, value: {{ .Values.valkeyAddress | quote }}}]
+          ports: [{name: stats, containerPort: 8084}]
+          resources: {{ .Values.adapterResources | toJson }}
+          readinessProbe:
+            httpGet: {path: /healthz, port: stats}
+      volumes:
+        - name: provisioning
+          configMap: {name: {{ .Release.Name }}-provisioning}
+        - name: dashboards
+          configMap: {name: {{ .Release.Name }}-dashboard}

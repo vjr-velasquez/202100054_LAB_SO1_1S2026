@@ -1,0 +1,12 @@
+- group: monitoring.so1.local
+  version: v1alpha1
+  kind: ValkeyInstance
+  chart: helm-charts/valkeyinstance
+  reconcilePeriod: 15s
+  watchDependentResources: true
+- group: monitoring.so1.local
+  version: v1alpha1
+  kind: GrafanaInstance
+  chart: helm-charts/grafanainstance
+  reconcilePeriod: 15s
+  watchDependentResources: true

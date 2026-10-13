@@ -1,0 +1,7 @@
+image: valkey/valkey:8.1.10-alpine
+storageSize: 1Gi
+storageClassName: ""
+maxMemory: 128mb
+resources:
+  requests: {cpu: 50m, memory: 192Mi}
+  limits: {cpu: 500m, memory: 256Mi}

@@ -1,0 +1,495 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "Dashboard institucional para la telemetría, política de conservación y auditoría eBPF del Proyecto 2 de Sistemas Operativos 1.",
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "code": { "language": "plaintext", "showLineNumbers": false, "showMiniMap": false },
+        "content": "# SO1 · Proyecto 2\n### Observabilidad de contenedores · Kernel C · Daemon Go · eBPF · Valkey\n**Carné:** 202100054 &nbsp;&nbsp;·&nbsp;&nbsp; Actualización automática cada 30 segundos",
+        "mode": "markdown"
+      },
+      "pluginVersion": "13.0.2",
+      "title": "",
+      "transparent": true,
+      "type": "text"
+    },
+    {
+      "datasource": { "type": "redis-datasource", "uid": "valkey" },
+      "description": "Memoria RAM física total reportada por el módulo del kernel.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "blue", "mode": "fixed" },
+          "decimals": 2,
+          "mappings": [],
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 3 },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": { "type": "redis-datasource", "uid": "valkey" },
+          "query": "EVAL \"local x=redis.call('GET',KEYS[1]); if not x then return {} end; local j=cjson.decode(x); return {cjson.encode({total_bytes=j.memory.total_kb*1024,used_bytes=j.memory.used_kb*1024,free_bytes=j.memory.free_kb*1024,used_percent=(j.memory.used_kb/j.memory.total_kb)*100,low=j.summary.low_kept,high=j.summary.high_kept,missing_low=j.summary.missing_low,missing_high=j.summary.missing_high})}\" 1 so1:proyecto2:telemetry:latest",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "RAM total",
+      "transformations": [
+        { "id": "extractFields", "options": { "format": "json", "replace": true, "source": "Value" } },
+        { "id": "filterFieldsByName", "options": { "include": { "names": ["total_bytes"] } } }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "redis-datasource", "uid": "valkey" },
+      "description": "Memoria RAM utilizada en la última muestra del kernel.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "orange", "mode": "fixed" },
+          "decimals": 2,
+          "mappings": [],
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 3 },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": { "type": "redis-datasource", "uid": "valkey" },
+          "query": "EVAL \"local x=redis.call('GET',KEYS[1]); if not x then return {} end; local j=cjson.decode(x); return {cjson.encode({total_bytes=j.memory.total_kb*1024,used_bytes=j.memory.used_kb*1024,free_bytes=j.memory.free_kb*1024,used_percent=(j.memory.used_kb/j.memory.total_kb)*100,low=j.summary.low_kept,high=j.summary.high_kept,missing_low=j.summary.missing_low,missing_high=j.summary.missing_high})}\" 1 so1:proyecto2:telemetry:latest",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "RAM usada",
+      "transformations": [
+        { "id": "extractFields", "options": { "format": "json", "replace": true, "source": "Value" } },
+        { "id": "filterFieldsByName", "options": { "include": { "names": ["used_bytes"] } } }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "redis-datasource", "uid": "valkey" },
+      "description": "Memoria RAM libre reportada por el módulo del kernel.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "green", "mode": "fixed" },
+          "decimals": 2,
+          "mappings": [],
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 3 },
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": { "type": "redis-datasource", "uid": "valkey" },
+          "query": "EVAL \"local x=redis.call('GET',KEYS[1]); if not x then return {} end; local j=cjson.decode(x); return {cjson.encode({total_bytes=j.memory.total_kb*1024,used_bytes=j.memory.used_kb*1024,free_bytes=j.memory.free_kb*1024,used_percent=(j.memory.used_kb/j.memory.total_kb)*100,low=j.summary.low_kept,high=j.summary.high_kept,missing_low=j.summary.missing_low,missing_high=j.summary.missing_high})}\" 1 so1:proyecto2:telemetry:latest",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "RAM libre",
+      "transformations": [
+        { "id": "extractFields", "options": { "format": "json", "replace": true, "source": "Value" } },
+        { "id": "filterFieldsByName", "options": { "include": { "names": ["free_bytes"] } } }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "redis-datasource", "uid": "valkey" },
+      "description": "Porcentaje actual de memoria RAM utilizada.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 1,
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 3 },
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": { "type": "redis-datasource", "uid": "valkey" },
+          "query": "EVAL \"local x=redis.call('GET',KEYS[1]); if not x then return {} end; local j=cjson.decode(x); return {cjson.encode({total_bytes=j.memory.total_kb*1024,used_bytes=j.memory.used_kb*1024,free_bytes=j.memory.free_kb*1024,used_percent=(j.memory.used_kb/j.memory.total_kb)*100,low=j.summary.low_kept,high=j.summary.high_kept,missing_low=j.summary.missing_low,missing_high=j.summary.missing_high})}\" 1 so1:proyecto2:telemetry:latest",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "Uso de RAM",
+      "transformations": [
+        { "id": "extractFields", "options": { "format": "json", "replace": true, "source": "Value" } },
+        { "id": "filterFieldsByName", "options": { "include": { "names": ["used_percent"] } } }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "redis-datasource", "uid": "valkey" },
+      "description": "Objetivos de conservación calculados después del último ciclo.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "low" }, "properties": [{ "id": "displayName", "value": "Low activos" }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 3 }, { "color": "red", "value": 4 }] } }] },
+          { "matcher": { "id": "byName", "options": "high" }, "properties": [{ "id": "displayName", "value": "High activos" }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 2 }, { "color": "red", "value": 3 }] } }] },
+          { "matcher": { "id": "byName", "options": "missing_low" }, "properties": [{ "id": "displayName", "value": "Low faltantes" }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }] },
+          { "matcher": { "id": "byName", "options": "missing_high" }, "properties": [{ "id": "displayName", "value": "High faltantes" }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }] }
+        ]
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 3 },
+      "id": 6,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showPercentChange": false,
+        "textMode": "value_and_name",
+        "wideLayout": true
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": { "type": "redis-datasource", "uid": "valkey" },
+          "query": "EVAL \"local x=redis.call('GET',KEYS[1]); if not x then return {} end; local j=cjson.decode(x); return {cjson.encode({total_bytes=j.memory.total_kb*1024,used_bytes=j.memory.used_kb*1024,free_bytes=j.memory.free_kb*1024,used_percent=(j.memory.used_kb/j.memory.total_kb)*100,low=j.summary.low_kept,high=j.summary.high_kept,missing_low=j.summary.missing_low,missing_high=j.summary.missing_high})}\" 1 so1:proyecto2:telemetry:latest",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "Política de conservación",
+      "transformations": [
+        { "id": "extractFields", "options": { "format": "json", "replace": true, "source": "Value" } },
+        { "id": "filterFieldsByName", "options": { "include": { "names": ["low", "high", "missing_low", "missing_high"] } } }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "redis-datasource", "uid": "valkey" },
+      "description": "Evolución histórica de RAM total, usada y libre según las muestras almacenadas por el daemon.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 16,
+            "gradientMode": "opacity",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "bytes"
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "used_bytes" }, "properties": [{ "id": "displayName", "value": "RAM usada" }, { "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "free_bytes" }, "properties": [{ "id": "displayName", "value": "RAM libre" }, { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "total_bytes" }, "properties": [{ "id": "displayName", "value": "RAM total" }, { "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }] }
+        ]
+      },
+      "gridPos": { "h": 9, "w": 16, "x": 0, "y": 7 },
+      "id": 7,
+      "options": {
+        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": { "type": "redis-datasource", "uid": "valkey" },
+          "query": "EVAL \"local xs=redis.call('LRANGE',KEYS[1],0,999); local out={}; for _,x in ipairs(xs) do local ok,j=pcall(cjson.decode,x); if ok and j.timestamp and j.memory then out[#out+1]=cjson.encode({timestamp=j.timestamp,total_bytes=j.memory.total_kb*1024,used_bytes=j.memory.used_kb*1024,free_bytes=j.memory.free_kb*1024}) end end; return out\" 1 so1:proyecto2:telemetry:history",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "Evolución temporal de memoria RAM",
+      "transformations": [
+        { "id": "extractFields", "options": { "format": "json", "replace": true, "source": "Value" } },
+        { "id": "convertFieldType", "options": { "conversions": [{ "destinationType": "time", "targetField": "timestamp" }], "fields": {} } },
+        { "id": "sortBy", "options": { "fields": {}, "sort": [{ "desc": false, "field": "timestamp" }] } }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "redis-datasource", "uid": "valkey" },
+      "description": "Fotografía posterior al último ciclo del daemon. Los contenedores de monitoreo están marcados como protegidos.",
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "inspect": false }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "CPU %" }, "properties": [{ "id": "unit", "value": "percent" }, { "id": "decimals", "value": 2 }] },
+          { "matcher": { "id": "byName", "options": "RSS" }, "properties": [{ "id": "unit", "value": "bytes" }] },
+          { "matcher": { "id": "byName", "options": "VSZ" }, "properties": [{ "id": "unit", "value": "bytes" }] }
+        ]
+      },
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 7 },
+      "id": 8,
+      "options": { "cellHeight": "sm", "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false }, "showHeader": true, "sortBy": [{ "desc": true, "displayName": "CPU %" }] },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": { "type": "redis-datasource", "uid": "valkey" },
+          "query": "EVAL \"local x=redis.call('GET',KEYS[1]); if not x then return {} end; local j=cjson.decode(x); local out={}; for _,c in ipairs(j.containers or {}) do out[#out+1]=cjson.encode({name=c.name,id=string.sub(c.id or '',1,12),pid=c.pid,profile=c.profile,tier=c.tier,protected=c.protected,cpu_percent=c.cpu_percent,rss_bytes=(c.rss_kb or 0)*1024,vsz_bytes=(c.vsz_kb or 0)*1024}) end; return out\" 1 so1:proyecto2:telemetry:latest",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "Contenedores activos · última muestra",
+      "transformations": [
+        { "id": "extractFields", "options": { "format": "json", "replace": true, "source": "Value" } },
+        { "id": "organize", "options": { "excludeByName": {}, "indexByName": { "name": 0, "id": 1, "pid": 2, "profile": 3, "tier": 4, "protected": 5, "cpu_percent": 6, "rss_bytes": 7, "vsz_bytes": 8 }, "renameByName": { "cpu_percent": "CPU %", "id": "ID", "name": "Contenedor", "pid": "PID", "profile": "Perfil", "protected": "Protegido", "rss_bytes": "RSS", "tier": "Tier", "vsz_bytes": "VSZ" } } }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "redis-datasource", "uid": "valkey" },
+      "description": "Mayor RSS observado por contenedor, combinando muestras activas y eliminaciones confirmadas e identificando PID e ID.",
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "mappings": [], "unit": "bytes" },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 16 },
+      "id": 9,
+      "options": { "displayLabels": ["name", "percent"], "legend": { "displayMode": "table", "placement": "right", "showLegend": true, "values": ["value", "percent"] }, "pieType": "donut", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": true }, "tooltip": { "hideZeros": false, "mode": "single", "sort": "none" } },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": { "type": "redis-datasource", "uid": "valkey" },
+          "query": "EVAL \"local items={}; local xs=redis.call('LRANGE',KEYS[1],0,999); for _,x in ipairs(xs) do local ok,j=pcall(cjson.decode,x); if ok then for _,c in ipairs(j.containers or {}) do if c.tier~='system' then local id=c.id or c.name; local m=items[id] or {name=c.name,id=id,pid=c.pid,status='Histórico',rss_kb=0,cpu_percent=0}; m.rss_kb=math.max(m.rss_kb,c.rss_kb or 0); m.cpu_percent=math.max(m.cpu_percent,c.cpu_percent or 0); items[id]=m end end end end; local current=redis.call('GET',KEYS[3]); if current then local ok,j=pcall(cjson.decode,current); if ok then for _,c in ipairs(j.containers or {}) do if c.tier~='system' then local id=c.id or c.name; local m=items[id] or {name=c.name,id=id,pid=c.pid,status='Activo',rss_kb=0,cpu_percent=0}; m.name=c.name or m.name; m.id=id; m.pid=c.pid; m.status='Activo'; m.rss_kb=math.max(m.rss_kb,c.rss_kb or 0); m.cpu_percent=math.max(m.cpu_percent,c.cpu_percent or 0); items[id]=m end end end end; local ds=redis.call('LRANGE',KEYS[2],0,999); for _,x in ipairs(ds) do local ok,d=pcall(cjson.decode,x); if ok then local id=d.container_id or d.container_name; local m=items[id] or {name=d.container_name,id=id,pid=d.container_pid,status='Eliminado',rss_kb=0,cpu_percent=0}; m.name=d.container_name or m.name; m.id=id; m.pid=d.container_pid or m.pid; m.status='Eliminado'; m.rss_kb=math.max(m.rss_kb,d.rss_kb or 0); m.cpu_percent=math.max(m.cpu_percent,d.cpu_percent or 0); items[id]=m end end; local out={}; for _,m in pairs(items) do local display_name=m.name or 'N/D'; local display_pid=tostring(m.pid or 'N/D'); local display_id=string.sub(tostring(m.id or 'N/D'),1,12); out[#out+1]=cjson.encode({label=display_name..' · PID '..display_pid..' · ID '..display_id..' · '..m.status,rss_bytes=m.rss_kb*1024,cpu_percent=m.cpu_percent}) end; return out\" 3 so1:proyecto2:telemetry:history so1:proyecto2:containers:deleted:history so1:proyecto2:telemetry:latest",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "Top 5 histórico · consumo de RAM",
+      "transformations": [
+        { "id": "extractFields", "options": { "format": "json", "replace": true, "source": "Value" } },
+        { "id": "sortBy", "options": { "fields": {}, "sort": [{ "desc": true, "field": "rss_bytes" }] } },
+        { "id": "limit", "options": { "limit": 5 } },
+        { "id": "rowsToFields", "options": { "mappings": [{ "fieldName": "label", "handlerKey": "field.name" }, { "fieldName": "rss_bytes", "handlerKey": "field.value" }] } }
+      ],
+      "type": "piechart"
+    },
+    {
+      "datasource": { "type": "redis-datasource", "uid": "valkey" },
+      "description": "Mayor porcentaje de CPU observado por contenedor, combinando muestras activas y eliminaciones confirmadas e identificando PID e ID.",
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "decimals": 2, "mappings": [], "unit": "percent" },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 16 },
+      "id": 10,
+      "options": { "displayLabels": ["name", "percent"], "legend": { "displayMode": "table", "placement": "right", "showLegend": true, "values": ["value", "percent"] }, "pieType": "donut", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": true }, "tooltip": { "hideZeros": false, "mode": "single", "sort": "none" } },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": { "type": "redis-datasource", "uid": "valkey" },
+          "query": "EVAL \"local items={}; local xs=redis.call('LRANGE',KEYS[1],0,999); for _,x in ipairs(xs) do local ok,j=pcall(cjson.decode,x); if ok then for _,c in ipairs(j.containers or {}) do if c.tier~='system' then local id=c.id or c.name; local m=items[id] or {name=c.name,id=id,pid=c.pid,status='Histórico',rss_kb=0,cpu_percent=0}; m.rss_kb=math.max(m.rss_kb,c.rss_kb or 0); m.cpu_percent=math.max(m.cpu_percent,c.cpu_percent or 0); items[id]=m end end end end; local current=redis.call('GET',KEYS[3]); if current then local ok,j=pcall(cjson.decode,current); if ok then for _,c in ipairs(j.containers or {}) do if c.tier~='system' then local id=c.id or c.name; local m=items[id] or {name=c.name,id=id,pid=c.pid,status='Activo',rss_kb=0,cpu_percent=0}; m.name=c.name or m.name; m.id=id; m.pid=c.pid; m.status='Activo'; m.rss_kb=math.max(m.rss_kb,c.rss_kb or 0); m.cpu_percent=math.max(m.cpu_percent,c.cpu_percent or 0); items[id]=m end end end end; local ds=redis.call('LRANGE',KEYS[2],0,999); for _,x in ipairs(ds) do local ok,d=pcall(cjson.decode,x); if ok then local id=d.container_id or d.container_name; local m=items[id] or {name=d.container_name,id=id,pid=d.container_pid,status='Eliminado',rss_kb=0,cpu_percent=0}; m.name=d.container_name or m.name; m.id=id; m.pid=d.container_pid or m.pid; m.status='Eliminado'; m.rss_kb=math.max(m.rss_kb,d.rss_kb or 0); m.cpu_percent=math.max(m.cpu_percent,d.cpu_percent or 0); items[id]=m end end; local out={}; for _,m in pairs(items) do local display_name=m.name or 'N/D'; local display_pid=tostring(m.pid or 'N/D'); local display_id=string.sub(tostring(m.id or 'N/D'),1,12); out[#out+1]=cjson.encode({label=display_name..' · PID '..display_pid..' · ID '..display_id..' · '..m.status,rss_bytes=m.rss_kb*1024,cpu_percent=m.cpu_percent}) end; return out\" 3 so1:proyecto2:telemetry:history so1:proyecto2:containers:deleted:history so1:proyecto2:telemetry:latest",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "Top 5 histórico · consumo de CPU",
+      "transformations": [
+        { "id": "extractFields", "options": { "format": "json", "replace": true, "source": "Value" } },
+        { "id": "sortBy", "options": { "fields": {}, "sort": [{ "desc": true, "field": "cpu_percent" }] } },
+        { "id": "limit", "options": { "limit": 5 } },
+        { "id": "rowsToFields", "options": { "mappings": [{ "fieldName": "label", "handlerKey": "field.name" }, { "fieldName": "cpu_percent", "handlerKey": "field.value" }] } }
+      ],
+      "type": "piechart"
+    },
+    {
+      "datasource": { "type": "redis-datasource", "uid": "valkey" },
+      "description": "Cantidad total de contenedores eliminados después de una confirmación eBPF válida.",
+      "fieldConfig": {
+        "defaults": { "color": { "fixedColor": "red", "mode": "fixed" }, "decimals": 0, "mappings": [], "unit": "short" },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 4, "x": 0, "y": 25 },
+      "id": 11,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showPercentChange": false, "textMode": "value", "wideLayout": true },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        { "datasource": { "type": "redis-datasource", "uid": "valkey" }, "query": "LLEN so1:proyecto2:containers:deleted:history", "refId": "A", "type": "cli" }
+      ],
+      "title": "Eliminaciones confirmadas",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "redis-datasource", "uid": "valkey" },
+      "description": "Número de eliminaciones confirmadas por minuto según la evidencia almacenada en Valkey.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "red", "mode": "fixed" },
+          "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "Contenedores", "axisPlacement": "auto", "barAlignment": 0, "barWidthFactor": 0.75, "drawStyle": "bars", "fillOpacity": 55, "gradientMode": "opacity", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "insertNulls": false, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": false, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } },
+          "decimals": 0,
+          "mappings": [],
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 20, "x": 4, "y": 25 },
+      "id": 12,
+      "options": { "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "right", "showLegend": true }, "tooltip": { "hideZeros": false, "mode": "single", "sort": "none" } },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": { "type": "redis-datasource", "uid": "valkey" },
+          "query": "EVAL \"local xs=redis.call('LRANGE',KEYS[1],0,999); local buckets={}; for _,x in ipairs(xs) do local ok,j=pcall(cjson.decode,x); if ok and j.deleted_at and j.status=='container_deleted' then local minute=string.sub(j.deleted_at,1,16)..':00Z'; buckets[minute]=(buckets[minute] or 0)+1 end end; local out={}; for timestamp,count in pairs(buckets) do out[#out+1]=cjson.encode({timestamp=timestamp,count=count}) end; return out\" 1 so1:proyecto2:containers:deleted:history",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "Contenedores eliminados a lo largo del tiempo",
+      "transformations": [
+        { "id": "extractFields", "options": { "format": "json", "replace": true, "source": "Value" } },
+        { "id": "convertFieldType", "options": { "conversions": [{ "destinationType": "time", "targetField": "timestamp" }], "fields": {} } },
+        { "id": "sortBy", "options": { "fields": {}, "sort": [{ "desc": false, "field": "timestamp" }] } }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "redis-datasource", "uid": "valkey" },
+      "description": "Auditoría de eliminaciones aceptadas únicamente después de correlacionar PID, SIGKILL y signal_generate.",
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "filterable": true, "inspect": false }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Señal" }, "properties": [{ "id": "custom.cellOptions", "value": { "type": "color-background" } }] },
+          { "matcher": { "id": "byName", "options": "Fecha" }, "properties": [{ "id": "unit", "value": "dateTimeAsIso" }] }
+        ]
+      },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 31 },
+      "id": 13,
+      "options": { "cellHeight": "sm", "footer": { "countRows": true, "fields": "", "reducer": ["count"], "show": true }, "showHeader": true, "sortBy": [{ "desc": true, "displayName": "Fecha" }] },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": { "type": "redis-datasource", "uid": "valkey" },
+          "query": "EVAL \"local xs=redis.call('LRANGE',KEYS[1],0,999); local out={}; for _,x in ipairs(xs) do local ok,j=pcall(cjson.decode,x); if ok and j.status=='container_deleted' and j.signal==9 and j.event_source=='signal_generate' and j.container_pid==j.target_pid then out[#out+1]=cjson.encode({deleted_at=j.deleted_at,container=j.container_name,id=string.sub(j.container_id or '',1,12),profile=j.profile,container_pid=j.container_pid,caller_pid=j.caller_pid,target_pid=j.target_pid,signal=j.signal,command=j.command,source=j.event_source,status=j.status}) end end; return out\" 1 so1:proyecto2:containers:deleted:history",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "Auditoría eBPF · eliminaciones confirmadas",
+      "transformations": [
+        { "id": "extractFields", "options": { "format": "json", "replace": true, "source": "Value" } },
+        { "id": "convertFieldType", "options": { "conversions": [{ "destinationType": "time", "targetField": "deleted_at" }], "fields": {} } },
+        { "id": "organize", "options": { "excludeByName": {}, "indexByName": { "deleted_at": 0, "container": 1, "id": 2, "profile": 3, "container_pid": 4, "caller_pid": 5, "target_pid": 6, "signal": 7, "command": 8, "source": 9, "status": 10 }, "renameByName": { "caller_pid": "PID emisor", "command": "Comando", "container": "Contenedor", "container_pid": "PID contenedor", "deleted_at": "Fecha", "id": "ID", "profile": "Perfil", "signal": "Señal", "source": "Origen eBPF", "status": "Estado", "target_pid": "PID objetivo" } } },
+        { "id": "sortBy", "options": { "fields": {}, "sort": [{ "desc": true, "field": "Fecha" }] } },
+        { "id": "limit", "options": { "limit": 25 } }
+      ],
+      "type": "table"
+    }
+  ],
+  "preload": false,
+  "refresh": "30s",
+  "schemaVersion": 42,
+  "tags": ["SO1", "Proyecto 2", "eBPF", "Docker", "Valkey"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {
+    "refresh_intervals": ["10s", "20s", "30s", "1m", "5m"],
+    "time_options": ["15m", "1h", "6h", "12h", "24h", "2d", "7d"]
+  },
+  "timezone": "browser",
+  "title": "SO1 · Proyecto 2 — Observabilidad de Contenedores",
+  "uid": "so1-proyecto2-observabilidad",
+  "version": 4,
+  "weekStart": "monday"
+}

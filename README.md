@@ -1,3 +1,36 @@
+# Laboratorio de Sistemas Operativos 1
+
+Repositorio de proyectos de **Victor Hugo Velásquez Hernández**, carné
+**202100054**.
+
+## Proyecto 2 — Observabilidad y gestión autónoma de contenedores
+
+El Proyecto 2 implementa un sistema integral sobre Linux que combina un módulo
+del kernel en C, un daemon en Go, una sonda eBPF, Docker, Valkey y Grafana. El
+sistema obtiene telemetría desde `/proc`, conserva la cantidad requerida de
+contenedores, elimina cargas no permitidas y registra una eliminación solamente
+cuando la señal `SIGKILL` queda confirmada por eBPF.
+
+La documentación completa, incluyendo arquitectura, instalación desde cero,
+ejecución, validación integral y solución de problemas, está disponible en:
+
+**[Manual técnico y guía de instalación del Proyecto 2](proyecto2/README.md)**
+
+Inicio rápido desde una máquina ya configurada:
+
+```bash
+cd proyecto2/daemon
+go test ./...
+go vet ./...
+go build -o daemon ./cmd/daemon
+sudo ./daemon -project-root=.. -interval=30s -top=5 -execute
+```
+
+Dashboard:
+<http://127.0.0.1:3000/d/so1-proyecto2-observabilidad/91ba53d>
+
+---
+
 # Proyecto 1 — Laboratorio de Sistemas Operativos 1
 
 Implementación de tres APIs en Go distribuidas entre dos máquinas virtuales, utilizando distintos motores de contenedores y un registro OCI privado Zot.

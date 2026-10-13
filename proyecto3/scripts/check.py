@@ -104,10 +104,12 @@ def check_contracts():
 def check_docs():
     for name in ("README.md", "contracts", "services/rust-api", "services/go", "operator",
                  "deploy", "infra", "load", "tests/fixtures", "tests/test_contracts.py",
-                 "scripts/doctor.py", "ci/check.sh", ".githooks/pre-push", "Makefile", "docs/ramas.md"):
+                 "scripts/doctor.py", "ci/check.sh", ".githooks/pre-push", "Makefile"):
         if not (ROOT / name).exists():
             raise ValueError(f"falta estructura requerida: {name}")
     for path in ROOT.rglob("*.md"):
+        if any(part in {"docs", "artifacts", "target", ".git"} for part in path.relative_to(ROOT).parts):
+            continue  # Documentos locales excluidos del repositorio.
         content = path.read_text()
         if sum(line.startswith("```") for line in content.splitlines()) % 2:
             raise ValueError(f"bloque Markdown abierto: {path.relative_to(ROOT)}")

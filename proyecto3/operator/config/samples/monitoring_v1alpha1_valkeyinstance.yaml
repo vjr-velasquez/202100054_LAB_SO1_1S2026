@@ -1,0 +1,7 @@
+apiVersion: monitoring.so1.local/v1alpha1
+kind: ValkeyInstance
+metadata: {name: store, namespace: mumn}
+spec:
+  image: valkey/valkey:8.1.10-alpine
+  storageSize: 1Gi
+  maxMemory: 128mb
