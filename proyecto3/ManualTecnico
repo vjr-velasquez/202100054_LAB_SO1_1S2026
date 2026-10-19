@@ -1,0 +1,475 @@
+# Manual técnico — Proyecto 3 M.U.M.N.K8s
+
+**Estudiante:** Victor Hugo Velásquez Hernández  
+**Carné:** 202100054  
+**País asignado:** China (CHN)  
+**Fecha de documentación:** 19 de octubre de 2026  
+**Entorno documentado:** k3s local sobre VM QEMU/KVM; namespace `mumn`.
+
+Este manual describe la implementación del repositorio, su operación y sus
+pruebas. La autorización de usar k3s local y Traefik fue comunicada por el
+estudiante. No se aprovisionan recursos de GCP. Las mediciones son del entorno
+local y no representan una garantía de rendimiento en otras máquinas.
+
+## 1. Arquitectura
+
+```text
+Locust / cliente HTTP
+        │ POST /grpc-202100054
+        ▼
+Traefik (Gateway API + HTTPRoute)
+        ▼
+Rust API
+        ▼
+Pod go-entry: Go API → cliente gRPC
+        ▼ gRPC, descubrimiento DNS y round_robin
+Pod go-publisher: servidor gRPC → writer
+        ▼ publicación persistente y confirmada
+RabbitMQ → consumidor Go → Valkey (AOF + PVC)
+                              ▲
+                              │ consulta de estadísticas
+Navegador → Grafana / Infinity → adaptador Go
+```
+
+El Operator Helm reconcilia `ValkeyInstance/store` y `GrafanaInstance/view`.
+Zot funciona en Docker, fuera de Kubernetes, como registro HTTPS autenticado.
+Las imágenes se publican por Skopeo y se despliegan por digest. Locust descarga
+el perfil de carga como artefacto OCI mediante ORAS.
+
+| Componente | Responsabilidad |
+|---|---|
+| `rust-api` | Entrada HTTP, validación e identidad del reporte |
+| `go-entry` | Dos contenedores por Pod: API y cliente gRPC |
+| `go-publisher` | Dos contenedores por Pod: servidor gRPC y writer |
+| `rabbitmq` | Cola durable, mensajes persistentes y confirmaciones |
+| `consumer` | Guardado y ACK manual después de persistir o detectar duplicado |
+| `store-valkey` | Eventos únicos y estadísticas por corrida |
+| `view-grafana` | Grafana y adaptador de estadísticas en contenedores separados |
+| `mumn-operator` | Gestión declarativa de Valkey y Grafana |
+
+Una réplica de Deployment es un **Pod completo**, no un contenedor. HPA escala
+los Deployments `rust-api` y `go-publisher` entre 1 y 3 Pods con objetivo CPU 30%
+respecto a los recursos solicitados. El publicador conserva sus dos contenedores
+en cada réplica. La reducción usa estabilización de 60 segundos y hasta un Pod
+cada 30 segundos. El cliente gRPC actualiza DNS cada cinco segundos para descubrir
+nuevos publicadores a través del Service headless.
+
+## 2. Organización del código
+
+| Ruta relativa a `proyecto3` | Contenido |
+|---|---|
+| `contracts/` | JSON Schema y contrato protobuf |
+| `services/rust-api/` | API Rust y Dockerfile |
+| `services/go/` | Roles Go, estadísticas, almacenamiento y tests |
+| `operator/` | CRD, RBAC, Operator Helm y charts |
+| `operator/helm-charts/grafanainstance/dashboards/` | Dashboard provisionado |
+| `deploy/k3s/` | Workloads, Gateway y HTTPRoute |
+| `deploy/phase6/` | HPA y descubrimiento gRPC |
+| `infra/` | VM, configuración k3s/Zot y versiones |
+| `load/` | Locust y perfil de carga |
+| `scripts/` | Instalación, pruebas, diagnóstico y reportes |
+| `tests/evidence/` | Evidencias seleccionadas para el repositorio |
+| `artifacts/` | Estado local, herramientas, credenciales y resultados; ignorado por Git |
+
+Las versiones de infraestructura están en [versions.json](infra/k3s/versions.json).
+Entre las utilizadas: k3s `v1.35.9+k3s1`, Valkey `8.1.10`, Locust `2.32.10`,
+Grafana `13.0.2` e Infinity `4.1.1`. Los Dockerfiles y archivos de dependencias
+son la referencia para las versiones del código.
+
+## 3. Requisitos e instalación inicial
+
+Host Linux x86_64 con Docker operativo, Python >=3.10, Make, Git, OpenSSL,
+`htpasswd`, OpenSSH, `qemu-system-x86_64`, `qemu-img`, `xorriso` y acceso a
+`/dev/kvm`. La VM usa 4 vCPU, 6 GiB RAM y un disco virtual disperso de 30 GiB.
+Reservar memoria adicional para Docker y el host, y al menos unos 15 GiB de
+espacio inicial; el consumo crece con imágenes y datos. Se necesita Internet
+para las descargas iniciales. Go y Rust pueden compilarse mediante Docker.
+
+**Todos los comandos de este manual parten de la raíz del repositorio**, donde
+existe la carpeta `proyecto3`. No es necesario copiar la ruta personal del autor.
+
+```bash
+make -C proyecto3 doctor
+docker ps
+```
+
+`doctor` verifica presencia de herramientas; no certifica espacio, versiones,
+Docker activo ni salud del clúster.
+
+Para una instalación nueva, ejecutar secuencialmente:
+
+```bash
+make -C proyecto3 phase5-up
+make -C proyecto3 phase6-up
+```
+
+El primer comando prepara VM, Zot, herramientas, imágenes y recursos. El segundo
+publica los cambios de fase 6, actualiza el adaptador y configura HPA y gRPC.
+No usar `phase5-up` como arranque diario: reconstruye recursos, puede interrumpir
+el servicio y restaura configuraciones de esa fase. Los YAML fuente contienen
+imágenes simbólicas; usar los scripts para sustituirlas por digests de Zot.
+
+Para actualizar código de fase 6 en un entorno existente, usar `phase6-up` con
+VM y Zot activos. Esto reconstruye y despliega; no es una simple consulta.
+
+## 4. Arranque diario y organización de terminales
+
+Si el entorno ya está instalado:
+
+```bash
+docker start mumn-zot-phase5
+python3 proyecto3/scripts/phase5-vm.py
+```
+
+La VM es un proceso QEMU del usuario; no aparece en virt-manager ni arranca
+sola al reiniciar el host. Dentro de ella, k3s se inicia con systemd.
+
+En la **terminal de trabajo**, definir esta función para abreviar los comandos:
+
+```bash
+k() {
+  proyecto3/artifacts/tools/kubectl \
+    --kubeconfig proyecto3/artifacts/phase5/kubeconfig -n mumn "$@"
+}
+k get nodes
+k get pods,svc,hpa
+```
+
+La función existe solo en esa terminal. Se espera nodo `Ready` y contenedores
+listos; `2/2` significa dos contenedores listos dentro del mismo Pod.
+
+En una **segunda terminal**, dedicada exclusivamente a Grafana:
+
+```bash
+proyecto3/artifacts/tools/kubectl \
+  --kubeconfig proyecto3/artifacts/phase5/kubeconfig \
+  -n mumn port-forward service/view-grafana 13301:3000
+```
+
+Esperar `Forwarding from 127.0.0.1:13301 -> 3000` y mantener el comando activo.
+Cerrar esa terminal o pulsar Ctrl+C cierra el acceso del navegador; no apaga
+Kubernetes. Si el Pod se reemplaza, puede ser necesario volver a crear el túnel.
+
+| Acceso desde el host | Puerto |
+|---|---:|
+| Grafana por port-forward | 13301 |
+| Gateway de la aplicación | 18081 |
+| API Kubernetes | 16443 |
+| SSH VM | 22230 |
+| Zot HTTPS | 15000 |
+| Adaptador, solo si se abre túnel adicional | 18085 → 8084 |
+
+`localhost` se refiere al equipo donde se abre el navegador. Estos puertos no
+publican automáticamente el proyecto a otras computadoras.
+
+## 5. Contrato de entrada y garantías
+
+Endpoint: `POST http://127.0.0.1:18081/grpc-202100054`.
+
+| Campo | Restricción |
+|---|---|
+| `country` | USA, RUS, CHN, ESP o GTM |
+| `warplanes_in_air` | Entero JSON entre 0 y 50 |
+| `warships_in_water` | Entero JSON entre 0 y 30 |
+| `timestamp` | RFC3339 con zona horaria; hasta seis decimales |
+
+Se rechazan campos adicionales/repetidos, tipos incorrectos y fechas imposibles.
+El cuerpo máximo es 4 KiB. `X-Run-ID` identifica la corrida;
+`Idempotency-Key` contiene el UUID del evento. Mantener ambos al reintentar.
+Un UUID nuevo representa otro reporte aunque el JSON sea idéntico.
+
+HTTP 202 significa publicación confirmada en RabbitMQ, **no prueba por sí solo
+el almacenamiento definitivo**. El consumidor guarda después en Valkey y entonces
+confirma el mensaje. Los conflictos e inválidos se conservan en la cola
+`mumn.reports.failed`. Si Valkey falla, el consumidor reintenta sin confirmar.
+
+Valkey usa hashes `mumn:run:<run_id>`: campos `event:<uuid>`, `count`, conteos
+por país, histogramas y último reporte por país. Lua valida antes de una escritura
+atómica. Un duplicado idéntico no aumenta el conteo; un reporte tardío no sustituye
+el último estado más reciente. AOF usa sincronización cada segundo y PVC local.
+Esto no garantiza pérdida cero ante apagado abrupto del host.
+
+## 6. Prueba funcional, duplicados y validación
+
+En la terminal de trabajo, conservar estas variables durante toda la prueba:
+
+```bash
+RUN_ID="manual-$(date +%Y%m%d-%H%M%S)"
+EVENT_ID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+REPORT_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+BODY="{\"country\":\"CHN\",\"warplanes_in_air\":20,\"warships_in_water\":8,\"timestamp\":\"$REPORT_TIME\"}"
+curl -i --max-time 10 http://127.0.0.1:18081/grpc-202100054 \
+  -H 'Content-Type: application/json' \
+  -H "X-Run-ID: $RUN_ID" -H "Idempotency-Key: $EVENT_ID" -d "$BODY"
+```
+
+Esperar HTTP 202 y consultar el almacenamiento; al ser asíncrono, repetir la
+consulta después de unos segundos si todavía no existe:
+
+```bash
+k exec store-valkey-0 -- valkey-cli HGET "mumn:run:$RUN_ID" count
+k exec store-valkey-0 -- valkey-cli HGET "mumn:run:$RUN_ID" "event:$EVENT_ID"
+```
+
+Se espera `1` y el JSON enviado. Repetir exactamente el mismo `curl` conserva
+conteo `1`. No regenerar `EVENT_ID` ni `BODY` en la prueba de duplicado.
+
+Para validar el límite, enviar un evento nuevo con 51 aviones:
+
+```bash
+INVALID_EVENT_ID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+curl -i --max-time 10 http://127.0.0.1:18081/grpc-202100054 \
+  -H 'Content-Type: application/json' \
+  -H "X-Run-ID: $RUN_ID" -H "Idempotency-Key: $INVALID_EVENT_ID" \
+  -d "{\"country\":\"CHN\",\"warplanes_in_air\":51,\"warships_in_water\":8,\"timestamp\":\"$REPORT_TIME\"}"
+k exec store-valkey-0 -- valkey-cli HGET "mumn:run:$RUN_ID" count
+```
+
+Se espera HTTP 400 y conteo sin cambios. Guardar `RUN_ID` para abrir la corrida
+en Grafana; las variables no pasan automáticamente a otra terminal.
+
+## 7. Persistencia
+
+Esta prueba interrumpe brevemente Valkey; ejecutarla sin otra carga concurrente.
+No elimina el PVC.
+
+```bash
+k get pod store-valkey-0 -o jsonpath='{.metadata.uid}{"\n"}'
+k get pvc data-store-valkey-0
+k delete pod store-valkey-0
+k rollout status statefulset/store-valkey --timeout=180s
+k get pod store-valkey-0 -o jsonpath='{.metadata.uid}{"\n"}'
+k get pvc data-store-valkey-0
+k exec store-valkey-0 -- valkey-cli HGET "mumn:run:$RUN_ID" count
+k exec store-valkey-0 -- valkey-cli HGET "mumn:run:$RUN_ID" "event:$EVENT_ID"
+```
+
+El UID del Pod debe cambiar; el PVC debe conservar su volumen y los datos
+seguir disponibles. Esto acredita recreación del Pod, no recuperación frente a
+pérdida del disco de la VM.
+
+## 8. Carga y HPA
+
+Para ver el escalado durante una prueba, usar temporalmente otra terminal con
+el comando completo o volver a definir `k`:
+
+```bash
+k get hpa --watch
+```
+
+En la terminal de trabajo:
+
+```bash
+python3 proyecto3/scripts/phase6-load.py --scenario hpa
+```
+
+Por defecto usa 100 usuarios durante 180 segundos. Observar aumento de réplicas
+y comprobar disponibilidad con `k get deployments rust-api go-publisher`.
+Después de finalizar la carga, esperar reducción automática a una réplica;
+no escalar manualmente para demostrar el HPA. Ctrl+C termina únicamente el watch.
+
+Para la evaluación completa, ejecutar en secuencia y sin ensayos concurrentes:
+
+```bash
+make -C proyecto3 phase6-load
+make -C proyecto3 check-phase6
+make -C proyecto3 phase6-report
+```
+
+`phase6-load` compara un/dos publicadores Go y Valkey primario solo/primario con
+una réplica de lectura, además de HPA. Por defecto son tres repeticiones por
+configuración, 20 usuarios, 8 s de calentamiento y 30 s medidos. Los grupos pueden
+seleccionarse con `--scenario go`, `valkey` o `hpa`.
+
+`check-phase6` interrumpe componentes deliberadamente para probar recuperación.
+`phase6-report` rechaza evidencia incompleta, pérdida de identidades y ausencia
+de escalado/reducción. Los resultados quedan en `artifacts/phase6/`, incluyendo
+`latest-load.json` y `report.json`. Un `passed: true` pertenece a esa ejecución;
+no acredita por sí solo el funcionamiento sostenido del dashboard.
+
+La réplica Valkey es asíncrona y no ofrece promoción automática ni incrementa la
+capacidad de escritura. La interpretación académica de “1 y 2 réplicas Valkey”
+permanece pendiente de confirmación según la documentación del proyecto.
+
+## 9. Grafana e interpretación de datos
+
+Con el túnel activo abrir `http://localhost:13301/d/mumn-202100054`. El usuario
+es `admin`. La contraseña pertenece al Secret local; no se incluye en este manual:
+
+```bash
+k get secret grafana-admin -o jsonpath='{.data.password}' | base64 -d
+```
+
+Seleccionar el identificador completo en **Corrida**, pulsar Enter y refrescar.
+Para observar una ejecución terminada, puede desactivarse el refresco automático.
+Durante carga, el dashboard provisionado permite refresco cada cinco segundos.
+
+| Paneles | Interpretación |
+|---|---|
+| Máximos, mínimos y modas | Todos los reportes de la corrida; incluye países distintos de CHN |
+| Frecuencia de moda | Cantidad de apariciones; se muestran los empates |
+| Reportes CHN | Solo reportes de China |
+| Top países | Último reporte por país, no suma histórica |
+| Serie temporal CHN | Reportes de China dentro del rango temporal seleccionado |
+
+El resumen y los rankings no se recortan con el rango de fechas. Un cero válido
+no equivale a ausencia de datos. Elegir otra corrida cambia los datos consultados.
+
+El adaptador comparte el cálculo entre paneles mediante una caché de una corrida
+por cinco segundos y permite una carga global simultánea. Cada panel solicita
+solo su sección (`summary`, `top_planes`, `top_ships` o `series`). La gráfica
+limita su respuesta a 1000 puntos seleccionados uniformemente por posición en
+la secuencia temporal, conservando primero y último. Puede omitir picos
+intermedios; no modifica máximos/mínimos/modas ni los reportes almacenados.
+Reducir el rango permite examinar más detalle. El endpoint `/stats?run=...` sin
+`section` conserva la respuesta completa para diagnóstico/exportación.
+
+El endpoint de serie informa `series_total`, `series_returned` y `series_sampled`.
+La muestra se aplica después del filtro temporal. Los datos nuevos pueden tardar
+cinco segundos en reflejarse por la caché.
+
+## 10. Gancho de diagnóstico y prueba sostenida
+
+Desde la raíz del repositorio:
+
+```bash
+make -C proyecto3 check-dashboard RUN_ID=p6-hpa-c870d0c6a7
+```
+
+Reemplazar el identificador por una corrida existente. El gancho verifica:
+
+1. Contexto local `mumn-k3s` y disponibilidad de Grafana/Valkey.
+2. Estados, recursos, reinicios y terminaciones anteriores, incluyendo OOM.
+3. Conteo almacenado y respuesta individual del adaptador.
+4. Dashboard y autenticación usando el Secret, sin guardar credenciales.
+5. Consultas reales concurrentes de los 11 paneles mediante Infinity.
+6. Disponibilidad final y ausencia de reinicios nuevos.
+
+Un fallo produce salida distinta de cero. Las evidencias JSON quedan en
+`artifacts/dashboard/diagnosis-*.json`. El gancho no modifica datos ni recursos,
+pero las consultas consumen CPU/memoria. Sus túneles son temporales: **no deja
+abierto el puerto 13301 para el navegador**.
+
+Para probar el refresco sostenido:
+
+```bash
+python3 proyecto3/scripts/check-dashboard.py \
+  --run-id p6-hpa-c870d0c6a7 --cycles 120 --interval 5
+```
+
+Son 120 ciclos concurrentes separados por pausas de cinco segundos; la duración
+real incluye el tiempo de cada consulta. Al fallar un ciclo se detiene la carga
+y se conserva el diagnóstico. Una prueba breve correcta no garantiza que una
+sesión indefinida funcione bajo cualquier carga.
+
+Validación posterior a la corrección del 19/10/2026: 72 ciclos separados por
+cinco segundos, 792 consultas de paneles correctas y ningún reinicio nuevo.
+Grafana registró entre 163 y 206 MiB en las muestras de memoria. La evidencia
+incluye tiempos, imágenes y tamaños de respuesta en
+[dashboard-sostenido-2026-10-19.json](tests/evidence/dashboard-sostenido-2026-10-19.json).
+Esta prueba cubre 7 minutos y 25 segundos sobre la corrida indicada; no es
+una garantía para sesiones indefinidas ni corridas de cualquier tamaño.
+
+## 11. Solución de problemas
+
+| Síntoma | Comprobación y acción |
+|---|---|
+| `ERR_CONNECTION_REFUSED` en 13301 | Revisar la terminal del port-forward; volver a iniciarlo si terminó. Cambiar el enlace no abre un túnel. |
+| API 16443 rechaza conexión | Arrancar VM con `phase5-vm.py`; comprobar nodo Ready. |
+| `address already in use` | El puerto tiene otro proceso; revisar `ss -ltnp`. Reutilizar el túnel correcto o elegir otro puerto local. |
+| Panel sin datos, sin error | Verificar identificador completo y rango de fechas de la serie. |
+| Icono rojo / HTTP 503 | Ejecutar gancho; revisar Valkey, adaptador y logs, no solo `/healthz`. |
+| `OOMKilled` / salida 137 | Identificar el contenedor afectado y su límite; revisar tamaño y concurrencia de consultas. |
+| HPA `<unknown>` | Comprobar disponibilidad de métricas y esperar inicialización; no asumir escalado correcto. |
+| HTTP 202, aún sin evento | Esperar consumidor y revisar cola/logs; 202 confirma publicación, no guardado. |
+
+Comandos de inspección en la terminal con la función `k`:
+
+```bash
+k get pods,hpa,pvc
+k top pods --containers
+k describe pod store-valkey-0
+k logs deployment/view-grafana -c adapter --tail=50
+k logs deployment/view-grafana -c grafana --tail=50
+k logs deployment/consumer --tail=50
+```
+
+El incidente observado durante la documentación tuvo tres causas sucesivas:
+lecturas completas duplicadas en el adaptador, falta de memoria en Valkey y
+procesamiento de series grandes repetidas en Grafana. Se incorporaron cálculo
+compartido, recursos con margen, respuestas por sección y límite de puntos de
+visualización. Aumentar memoria solamente no sustituye estas medidas.
+
+Los cambios administrados por el Operator deben expresarse en el CR y sus
+fuentes; editar solo el Deployment puede ser revertido por reconciliación.
+`phase6-up` publica tanto el código Go del adaptador como el Operator que contiene
+el dashboard; cambiar el archivo JSON local no cambia por sí solo el clúster.
+
+## 12. Pruebas de código y evidencia de referencia
+
+```bash
+make -C proyecto3 check-reference
+make -C proyecto3 check
+```
+
+La primera comprueba contratos y scripts con Python; la segunda incluye pruebas
+Go/Rust, compilación, `go vet` y validación Helm/Kustomize. `check-integration`
+usa Compose y realiza interrupciones controladas en ese entorno. `check-k3s`
+realiza aceptación con cambios y reinicios en el clúster local; no ejecutarlo
+simultáneamente con un benchmark.
+
+Medición histórica de la corrida `p6-hpa-c870d0c6a7`, 19/10/2026:
+
+| Indicador | Valor observado |
+|---|---:|
+| Solicitudes contabilizadas | 157787 |
+| Fallos HTTP contabilizados | 0 |
+| Reportes aceptados / almacenados | 157787 / 157787 |
+| RPS | 878,05 |
+| Latencia HTTP media | 12,40 ms |
+| p50 / p95 / p99 HTTP | 8 / 36 / 63 ms |
+| Reportes CHN | 31390 |
+| Máximo / mínimo aviones | 50 / 0 |
+| Máximo / mínimo barcos | 30 / 0 |
+| Moda aviones / frecuencia | 8 / 3173 |
+| Moda barcos / frecuencia | 2 / 5285 |
+| HPA observado | 1 → 3 → 1 Pods |
+
+El resultado también registró 26 intentos no almacenados sin confirmación,
+separados de las solicitudes aceptadas. No deben describirse como pérdida de
+reportes confirmados ni omitirse al interpretar intentos totales. Las métricas
+HTTP no son latencia hasta almacenamiento. El RPS medido no es capacidad máxima.
+Las nuevas corridas generan otros UUID, tiempos y resultados.
+
+Para documentar una evaluación, conservar el JSON del gancho, informe de carga,
+identificadores, captura del dashboard, evidencia del HPA antes/durante/después
+y prueba de PVC. Copiar solo evidencias revisadas a `tests/evidence/`, nunca
+credenciales, kubeconfig, discos o el directorio completo `artifacts/`.
+
+## 13. Apagado y límites
+
+Cerrar el port-forward con Ctrl+C y detener el entorno conservando datos:
+
+```bash
+make -C proyecto3 phase5-down
+```
+
+No borrar `artifacts/phase5`: contiene VM, claves, certificados y almacenamiento
+Zot. No eliminar PVC para liberar espacio si se necesitan los reportes. El
+entorno usa un nodo y volúmenes locales; no proporciona alta disponibilidad
+entre máquinas. AOF y réplica asíncrona no garantizan pérdida cero ante fallos
+abruptos. El registro utiliza certificados locales que requieren renovación.
+
+Los entornos Compose (fase 3) y kind (fase 4) son alternativas de desarrollo y
+validación, independientes del k3s descrito aquí. Evitar confundir puertos,
+kubeconfigs o datos entre ellos y el Proyecto 2.
+
+## 14. Referencias dentro del repositorio
+
+- [Infraestructura y registro](infra/README.md).
+- [Contratos](contracts/README.md).
+- [Operator y reconciliación](operator/README.md).
+- [Carga, HPA y recuperación](deploy/phase6/README.md).
+- [Resultados históricos de fase 6](tests/evidence/phase6-resultados.md).
+- [Dashboard declarativo](operator/helm-charts/grafanainstance/dashboards/mumn.json).
+- [Gancho de diagnóstico](scripts/check-dashboard.py).
