@@ -45,6 +45,7 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana
       - ./provisioning:/etc/grafana/provisioning:ro
+      - ./dashboards:/var/lib/grafana/dashboards:ro
     restart: unless-stopped
     labels:
       so1.project: proyecto2

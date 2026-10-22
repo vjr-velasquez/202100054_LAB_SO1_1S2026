@@ -1,0 +1,12 @@
+image: mumn-grafana:phase4
+adapterImage: mumn-go:phase4
+valkeyAddress: store-valkey:6379
+adminSecret: grafana-admin
+runId: fixture
+dashboardTitle: M.U.M.N — CHN
+resources:
+  requests: {cpu: 100m, memory: 256Mi}
+  limits: {cpu: 1000m, memory: 1Gi}
+adapterResources:
+  requests: {cpu: 20m, memory: 64Mi}
+  limits: {cpu: 300m, memory: 192Mi}

@@ -1,0 +1,10 @@
+apiVersion: monitoring.so1.local/v1alpha1
+kind: GrafanaInstance
+metadata: {name: view, namespace: mumn}
+spec:
+  image: mumn-grafana:phase4
+  adapterImage: mumn-go:phase4
+  valkeyAddress: store-valkey:6379
+  adminSecret: grafana-admin
+  runId: fixture
+  dashboardTitle: M.U.M.N — CHN

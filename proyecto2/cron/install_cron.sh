@@ -27,6 +27,10 @@ if ! systemctl is-active --quiet cron; then
 fi
 
 mkdir -p "$LOG_DIR"
+if ! touch "$LOG_FILE"; then
+    echo "ERROR: no se puede escribir en $LOG_FILE"
+    exit 1
+fi
 
 TEMP_FILE="$(mktemp)"
 trap 'rm -f "$TEMP_FILE"' EXIT

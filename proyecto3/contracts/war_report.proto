@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package wartweets;
 
-// Ruta propuesta del módulo Go; se creará en la fase 3.
+// Ruta del módulo Go de los servicios.
 option go_package = "github.com/vjr-velasquez/202100054_LAB_SO1_1S2026/proyecto3/services/go/gen/wartweets;wartweets";
 
 message WarReportRequest {

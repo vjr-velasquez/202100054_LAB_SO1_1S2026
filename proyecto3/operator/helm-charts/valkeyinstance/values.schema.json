@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "string",
+      "minLength": 1
+    },
+    "resources": {
+      "type": "object"
+    },
+    "storageSize": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*(Mi|Gi)$"
+    },
+    "storageClassName": {
+      "type": "string"
+    },
+    "maxMemory": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*(mb|gb)$"
+    }
+  },
+  "additionalProperties": false
+}

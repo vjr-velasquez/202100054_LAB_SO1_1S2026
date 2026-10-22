@@ -1,0 +1,14 @@
+apiVersion: 1
+
+providers:
+  - name: SO1 Proyecto 2
+    orgId: 1
+    folder: SO1 — Proyecto 2
+    folderUid: so1-proyecto2
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

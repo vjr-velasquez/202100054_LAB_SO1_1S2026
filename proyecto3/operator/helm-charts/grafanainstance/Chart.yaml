@@ -1,0 +1,6 @@
+apiVersion: v2
+name: grafanainstance
+description: MUMN managed grafanainstance
+type: application
+version: 0.1.0
+appVersion: "1.0"

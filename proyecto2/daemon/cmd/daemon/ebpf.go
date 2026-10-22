@@ -88,14 +88,7 @@ func startEBPFMonitor(
 				continue
 			}
 
-			fmt.Printf(
-				"eBPF kill: origen=%s emisor=%d objetivo=%d señal=%d comando=%s\n",
-				event.Source,
-				event.CallerPID,
-				event.TargetPID,
-				event.Signal,
-				event.Command,
-			)
+			fmt.Println(formatEBPFEvent(event))
 
 			saveContext, cancelSave := context.WithTimeout(
 				monitorContext,
@@ -138,4 +131,16 @@ func startEBPFMonitor(
 	fmt.Println("Monitor eBPF conectado con Valkey")
 
 	return cleanup, nil
+}
+
+func formatEBPFEvent(event ebpfwatcher.Event) string {
+	return fmt.Sprintf(
+		"eBPF kill: timestamp=%s origen=%s emisor=%d objetivo=%d señal=%d comando=%s",
+		event.ObservedAt.UTC().Format(time.RFC3339Nano),
+		event.Source,
+		event.CallerPID,
+		event.TargetPID,
+		event.Signal,
+		event.Command,
+	)
 }

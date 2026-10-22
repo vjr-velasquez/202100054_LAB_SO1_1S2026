@@ -1,0 +1,720 @@
+{
+  "uid": "mumn-202100054",
+  "title": "M.U.M.N — CHN",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "timezone": "utc",
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "description": "Extremos, modas y conteo: corrida completa. Rankings: último estado por país. El rango de tiempo solo filtra las series CHN.",
+  "templating": {
+    "list": [
+      {
+        "name": "run",
+        "label": "Corrida",
+        "type": "textbox",
+        "query": "fixture",
+        "current": {
+          "text": "fixture",
+          "value": "fixture"
+        },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Máximo aviones",
+      "type": "stat",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "mumn"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "url": "http://127.0.0.1:8084/stats?run=${run:percentencode}",
+          "parser": "backend",
+          "format": "table",
+          "root_selector": "summary",
+          "columns": [
+            {
+              "selector": "max_planes",
+              "text": "Máximo aviones",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "mumn"
+          },
+          "url_options": {
+            "method": "GET",
+            "data": "",
+            "headers": [],
+            "params": []
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Sin datos"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 2,
+      "title": "Mínimo aviones",
+      "type": "stat",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "mumn"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "url": "http://127.0.0.1:8084/stats?run=${run:percentencode}",
+          "parser": "backend",
+          "format": "table",
+          "root_selector": "summary",
+          "columns": [
+            {
+              "selector": "min_planes",
+              "text": "Mínimo aviones",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "mumn"
+          },
+          "url_options": {
+            "method": "GET",
+            "data": "",
+            "headers": [],
+            "params": []
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Sin datos"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "title": "Máximo barcos",
+      "type": "stat",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "mumn"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "url": "http://127.0.0.1:8084/stats?run=${run:percentencode}",
+          "parser": "backend",
+          "format": "table",
+          "root_selector": "summary",
+          "columns": [
+            {
+              "selector": "max_ships",
+              "text": "Máximo barcos",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "mumn"
+          },
+          "url_options": {
+            "method": "GET",
+            "data": "",
+            "headers": [],
+            "params": []
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Sin datos"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "title": "Mínimo barcos",
+      "type": "stat",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "mumn"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "url": "http://127.0.0.1:8084/stats?run=${run:percentencode}",
+          "parser": "backend",
+          "format": "table",
+          "root_selector": "summary",
+          "columns": [
+            {
+              "selector": "min_ships",
+              "text": "Mínimo barcos",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "mumn"
+          },
+          "url_options": {
+            "method": "GET",
+            "data": "",
+            "headers": [],
+            "params": []
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Sin datos"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "title": "Moda aviones",
+      "type": "stat",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "mumn"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "url": "http://127.0.0.1:8084/stats?run=${run:percentencode}",
+          "parser": "backend",
+          "format": "table",
+          "root_selector": "summary",
+          "columns": [
+            {
+              "selector": "mode_planes",
+              "text": "Moda aviones",
+              "type": "string"
+            },
+            {
+              "selector": "mode_planes_frequency",
+              "text": "Frecuencia",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "mumn"
+          },
+          "url_options": {
+            "method": "GET",
+            "data": "",
+            "headers": [],
+            "params": []
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Sin datos"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 6,
+      "title": "Moda barcos",
+      "type": "stat",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "mumn"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "url": "http://127.0.0.1:8084/stats?run=${run:percentencode}",
+          "parser": "backend",
+          "format": "table",
+          "root_selector": "summary",
+          "columns": [
+            {
+              "selector": "mode_ships",
+              "text": "Moda barcos",
+              "type": "string"
+            },
+            {
+              "selector": "mode_ships_frequency",
+              "text": "Frecuencia",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "mumn"
+          },
+          "url_options": {
+            "method": "GET",
+            "data": "",
+            "headers": [],
+            "params": []
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 6,
+        "y": 4,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Sin datos"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 7,
+      "title": "País asignado",
+      "type": "stat",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "mumn"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "url": "http://127.0.0.1:8084/stats?run=${run:percentencode}",
+          "parser": "backend",
+          "format": "table",
+          "root_selector": "summary",
+          "columns": [
+            {
+              "selector": "country",
+              "text": "País asignado",
+              "type": "string"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "mumn"
+          },
+          "url_options": {
+            "method": "GET",
+            "data": "",
+            "headers": [],
+            "params": []
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Sin datos"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 8,
+      "title": "Reportes CHN",
+      "type": "stat",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "mumn"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "url": "http://127.0.0.1:8084/stats?run=${run:percentencode}",
+          "parser": "backend",
+          "format": "table",
+          "root_selector": "summary",
+          "columns": [
+            {
+              "selector": "count",
+              "text": "Reportes CHN",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "mumn"
+          },
+          "url_options": {
+            "method": "GET",
+            "data": "",
+            "headers": [],
+            "params": []
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 18,
+        "y": 4,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Sin datos"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 9,
+      "title": "Top países — aviones",
+      "type": "barchart",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "mumn"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "url": "http://127.0.0.1:8084/stats?run=${run:percentencode}",
+          "parser": "backend",
+          "format": "table",
+          "root_selector": "top_planes",
+          "columns": [
+            {
+              "selector": "country",
+              "text": "País",
+              "type": "string"
+            },
+            {
+              "selector": "value",
+              "text": "Top países — aviones",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "mumn"
+          },
+          "url_options": {
+            "method": "GET",
+            "data": "",
+            "headers": [],
+            "params": []
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Sin datos"
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "País",
+        "showValue": "always",
+        "legend": {
+          "showLegend": false
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Top países — barcos",
+      "type": "barchart",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "mumn"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "url": "http://127.0.0.1:8084/stats?run=${run:percentencode}",
+          "parser": "backend",
+          "format": "table",
+          "root_selector": "top_ships",
+          "columns": [
+            {
+              "selector": "country",
+              "text": "País",
+              "type": "string"
+            },
+            {
+              "selector": "value",
+              "text": "Top países — barcos",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "mumn"
+          },
+          "url_options": {
+            "method": "GET",
+            "data": "",
+            "headers": [],
+            "params": []
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Sin datos"
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "País",
+        "showValue": "always",
+        "legend": {
+          "showLegend": false
+        }
+      }
+    },
+    {
+      "id": 11,
+      "title": "CHN — evolución de aviones y barcos",
+      "type": "timeseries",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "mumn"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "url": "http://127.0.0.1:8084/stats?run=${run:percentencode}&from=${__from}&to=${__to}",
+          "parser": "backend",
+          "format": "timeseries",
+          "root_selector": "series",
+          "columns": [
+            {
+              "selector": "time",
+              "text": "Time",
+              "type": "timestamp"
+            },
+            {
+              "selector": "planes",
+              "text": "Aviones",
+              "type": "number"
+            },
+            {
+              "selector": "ships",
+              "text": "Barcos",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "mumn"
+          },
+          "url_options": {
+            "method": "GET",
+            "data": "",
+            "headers": [],
+            "params": []
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 24,
+        "h": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Sin datos"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    }
+  ]
+}
